@@ -1,0 +1,4 @@
+PASS PYTHON HARNESS ONLY valid ca.pem accepted
+PASS PYTHON HARNESS ONLY valid wrong-ca.pem rejected
+PASS PYTHON HARNESS ONLY wrong-name ca.pem rejected
+PASS PYTHON HARNESS ONLY expired ca.pem rejected

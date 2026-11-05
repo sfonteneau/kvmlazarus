@@ -1,0 +1,2 @@
+PASS actual compiled session bridge + installed libsystemd: UNKNOWN in container without a login session
+NOT a live graphical lock/unlock test

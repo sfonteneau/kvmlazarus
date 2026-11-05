@@ -1,0 +1,9 @@
+test_averages (__main__.Metrics.test_averages) ... ok
+test_counter_reset (__main__.Metrics.test_counter_reset) ... ok
+test_missing_and_negative (__main__.Metrics.test_missing_and_negative) ... ok
+test_no_ack (__main__.Metrics.test_no_ack) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.000s
+
+OK

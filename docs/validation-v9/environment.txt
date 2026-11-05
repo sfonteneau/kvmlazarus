@@ -1,0 +1,29 @@
+Base archive SHA256: 4b92fed220ddbebc4a37d7fd8cde7841149bf4a514ddc5be96b86b4c226609be
+Linux-6.18.57-x86_64-with-glibc2.41
+x86_64
+fpc ABSENT
+ppcx64 ABSENT
+lazbuild ABSENT
+gcc /usr/bin/gcc
+clang /usr/local/swift/usr/bin/clang
+ffmpeg /usr/bin/ffmpeg
+pkg-config /usr/bin/pkg-config
+Xvfb /usr/bin/Xvfb
+
+$ clang --version exit 0
+clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /usr/local/swift/usr/bin
+
+$ ffmpeg -version exit 0
+ffmpeg version 7.1.5-0+deb13u1 Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 14 (Debian 14.2.0-19)
+configuration: --prefix=/usr --extra-version=0+deb13u1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --disable-libmfx --disable-omx --enable-gnutls --enable-libaom --enable-libass --enable-libbs2b --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libglslang --enable-libgme --enable-libgsm --enable-libharfbuzz --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-openal --enable-opencl --enable-opengl --disable-sndio --enable-libvpl --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-ladspa --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-libjack --enable-libpulse --enable-librabbitmq --enable-librist --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libx264 --enable-libzmq --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-libplacebo --enable-librav1e --enable-pocketsphinx --enable-librsvg --enable-libjxl --enable-shared
+libavutil      59. 39.100 / 59. 39.100
+
+$ pkg-config --modversion libavcodec libavutil libswscale exit 1
+Package libavcodec was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libavcodec.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libavcodec', required by 'virtual:world', not found

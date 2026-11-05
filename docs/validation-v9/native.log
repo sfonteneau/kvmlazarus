@@ -1,0 +1,2 @@
+PASS: Annex-B/AVCC fixtures, allocation envelope, truncations, 100000 bounded malformed inputs (not a codec decoder test)
+PASS: real session bridge / mocked logind: active, locked, inactive, uid/session changes, errors, recovery, 1000 lifetime cycles

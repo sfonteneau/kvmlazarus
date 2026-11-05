@@ -1,0 +1,4 @@
+PASS: 445 structural/lexical assertions and shell syntax checks (not behavioral tests)
+NOT A BUILD: these checks do not prove Pascal compilation or desktop operation.
+FPC: not installed
+Lazarus lazbuild: not installed

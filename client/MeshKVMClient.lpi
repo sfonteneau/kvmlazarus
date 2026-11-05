@@ -1,0 +1,94 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12" />
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False" />
+      </Flags>
+      <SessionStorage Value="InProjectDir" />
+      <Title Value="MeshKVMClient" />
+      <Scaled Value="True" />
+    </General>
+    <BuildModes>
+      <Item Name="Default" Default="True" />
+    </BuildModes>
+    <RunParams>
+      <FormatVersion Value="2" />
+    </RunParams>
+    <RequiredPackages>
+      <Item>
+        <PackageName Value="mormot2" />
+      </Item>
+      <Item>
+        <PackageName Value="LCL" />
+      </Item>
+    </RequiredPackages>
+    <Units>
+      <Unit>
+        <Filename Value="MeshKVMClient.lpr" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="kvm_view_form.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_cli.pas" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_wire.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_jpeg_guard.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_extwire.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_security.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_codec.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_frame.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_input_queue.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_rgb_bitmap.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_tls_policy.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11" />
+    <Target>
+      <Filename Value="MeshKVMClient" />
+    </Target>
+    <SearchPaths>
+      <OtherUnitFiles Value="../shared" />
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)" />
+    </SearchPaths>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True" />
+        </Win32>
+      </Options>
+    </Linking>
+  </CompilerOptions>
+</CONFIG>

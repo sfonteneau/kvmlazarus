@@ -1,0 +1,15 @@
+Linux 6.18.57 x86_64
+cc (Debian 14.2.0-19) 14.2.0
+clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)
+Package gio-2.0 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `gio-2.0.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'gio-2.0', required by 'virtual:world', not found
+Package gio-unix-2.0 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `gio-unix-2.0.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'gio-unix-2.0', required by 'virtual:world', not found
+Package libpipewire-0.3 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libpipewire-0.3.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libpipewire-0.3', required by 'virtual:world', not found

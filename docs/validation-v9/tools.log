@@ -1,0 +1,11 @@
+test_extra_extensions_rejected (__main__.Frames.test_extra_extensions_rejected) ... ok
+test_fragment_and_ping (__main__.Frames.test_fragment_and_ping) ... ok
+test_masked_lengths (__main__.Frames.test_masked_lengths) ... ok
+test_masked_server_rejected (__main__.Frames.test_masked_server_rejected) ... ok
+test_oversized_header (__main__.Frames.test_oversized_header) ... ok
+test_partial_header_timeout (__main__.Frames.test_partial_header_timeout) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.045s
+
+OK

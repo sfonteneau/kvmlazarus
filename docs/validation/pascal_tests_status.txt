@@ -1,0 +1,2 @@
+NOT RUN: Free Pascal is required.
+Exit status: 2

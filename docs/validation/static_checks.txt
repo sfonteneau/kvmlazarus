@@ -1,0 +1,4 @@
+PASS: 266 static package/source checks and shell syntax checks
+NOT A BUILD: these checks do not prove Pascal compilation or desktop operation.
+FPC: not installed
+Lazarus lazbuild: not installed

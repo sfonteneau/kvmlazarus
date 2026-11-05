@@ -1,0 +1,10 @@
+NOT RUN: no Lazarus/Free Pascal compiler, no MeshKVM server/client executable.
+- Pascal v9 core and previous shared-core regression tests
+- Actual GUI clients, session lock/unlock matrix and international IME
+- mORMot TLS probe (Python harness alone passed, not a replacement)
+- test_security_network.py against the actual server
+- FFmpeg codec bridge build: development headers/libraries absent
+- Real H.264 encode/decode including GPU drivers and resynchronization
+- Application CPU/RSS/latency/bandwidth benchmarks
+- Windows WTS/DXGI/SendInput and macOS SCK/session/Quartz compilation
+No production security qualification or performance gain can be inferred.

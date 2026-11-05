@@ -1,0 +1,39 @@
+PASS: 450 structural/lexical assertions and shell syntax checks (not behavioral tests)
+NOT A BUILD: these checks do not prove Pascal compilation or desktop operation.
+FPC: not installed
+Lazarus lazbuild: not installed
+PASS: static pipeline invariants, JPEG sample and 1000 independent copy cases
+PASS: static bounds and optimized code paths (no runtime / FPS measurement)
+OK: 4:4:4 JPEG, accurate DCT flag, 512x512, max buffer 1574912 <= 2097152
+OK - messages de diagnostic distincts dans les sources (test lexical uniquement)
+PASS: 13 checks for overlay structure and session behavior (not compiled)
+PASS: client v9 de l utilisateur + diagnostic WebSocket + chemin interne de route
+PASS: routes WS, client v9/auth capabilities, capture souris (controle lexical)
+test_averages (__main__.Metrics.test_averages) ... ok
+test_counter_reset (__main__.Metrics.test_counter_reset) ... ok
+test_missing_and_negative (__main__.Metrics.test_missing_and_negative) ... ok
+test_no_ack (__main__.Metrics.test_no_ack) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.000s
+
+OK
+test_extra_extensions_rejected (__main__.Frames.test_extra_extensions_rejected) ... ok
+test_fragment_and_ping (__main__.Frames.test_fragment_and_ping) ... ok
+test_masked_lengths (__main__.Frames.test_masked_lengths) ... ok
+test_masked_server_rejected (__main__.Frames.test_masked_server_rejected) ... ok
+test_oversized_header (__main__.Frames.test_oversized_header) ... ok
+test_partial_header_timeout (__main__.Frames.test_partial_header_timeout) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.043s
+
+OK
+PASS: actual C converter: 20000 valid crop/rotation/stride/scale cases + 100000 bounded malformed cases
+PASS: XImage/SHM layouts, 0600 shared memory, ten XShmGetImage captures
+PASS: XGetSubImage fallback reuses the destination image
+PASS: XTest pointer movement and root coordinates
+PASS: XKB state layout and CapsLock preservation calls
+PASS: XFixes cursor position, hotspot, dimensions and native unsigned-long pixels
+NOTE: native ABI smoke test only; not a Pascal/server/client test
+PASSED: existing Python/static, C sanitizer and X11 native smoke tests

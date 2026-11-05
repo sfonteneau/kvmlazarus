@@ -1,0 +1,3 @@
+NOT RUN: Free Pascal is required; no Pascal tests executed.
+
+Exit code: 2

@@ -1,0 +1,5 @@
+PASS: XImage/SHM layouts, 0600 shared memory, ten XShmGetImage captures
+PASS: XGetSubImage fallback reuses the destination image
+PASS: XTest pointer movement and root coordinates
+PASS: XKB state layout and CapsLock preservation calls
+NOTE: native ABI smoke test only; not a Pascal/server/client test

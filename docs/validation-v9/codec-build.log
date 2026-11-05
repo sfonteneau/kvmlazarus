@@ -1,0 +1,3 @@
+NOT BUILT: FFmpeg development libraries libavcodec/libavutil/libswscale are required.
+
+Exit code: 2

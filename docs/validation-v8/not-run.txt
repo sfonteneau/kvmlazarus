@@ -1,0 +1,2 @@
+Pascal test runner exit code: 2
+Portal build exit code: 2

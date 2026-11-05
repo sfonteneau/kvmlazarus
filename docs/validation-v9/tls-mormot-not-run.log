@@ -1,0 +1,3 @@
+NOT RUN: compile test_tls_probe.lpi and provide --probe (actual mORMot client)
+
+Exit code: 2
