@@ -1,6 +1,8 @@
-# MeshKVM v9 - mode autonome (liaison statique des composants prives)
+# MeshKVM v9 - autonome avec choix Windows x86 / x64
 
-Base: `MeshKVM_v9_client_journal_GUI_sans_console.zip`.
+Base de ce correctif: `MeshKVM_v9_autonome_sources.zip`.
+Choix Windows ajoute: `--arch x86` ou `--arch x64`.
+Voir `docs/WINDOWS_X86_X64.md` pour les commandes et la validation de cette passe.
 Protocole: **meshkvm7**, inchange. JPEG 4:4:4, client BGR direct,
 bandeau F8, journal GUI, controles de flux et correctifs precedents conserves.
 
@@ -135,13 +137,20 @@ et du GPU. Le dialogue de consentement Wayland reste obligatoire.
 Les chemins sont implementes mais non compiles sur ces OS dans cette livraison.
 Les details, limites et commandes sont dans `docs/AUTONOME.md`.
 
-Windows x64, Python 3, Lazarus/FPC x64, MinGW-w64 du meme CPU/CRT:
+Windows x86 ou x64: Python 3, FPC/Lazarus et MinGW pour la cible choisie.
+Les chemins MinGW/TurboJPEG ci-dessous sont des exemples a adapter:
 
 ```bat
-build_standalone_windows.cmd --turbojpeg-archive C:\sdk\libturbojpeg.a
-rem Option DXGI, experimentale:
-build_standalone_windows.cmd --with-dxgi --turbojpeg-archive C:\sdk\libturbojpeg.a
+build_standalone_windows.cmd --arch x86 --toolchain-bin C:\toolchains\mingw32\bin --turbojpeg-archive C:\deps\turbojpeg\x86\libturbojpeg.a
+build_standalone_windows.cmd --arch x64 --toolchain-bin C:\toolchains\mingw64\bin --turbojpeg-archive C:\deps\turbojpeg\x64\libturbojpeg.a
+rem Ajouter --fpc et --lazbuild avec leurs chemins si necessaire.
+rem Option DXGI experimentale sur les deux cibles: ajouter --with-dxgi.
 ```
+
+Les projets Windows generes sont `_Standalone_x86.lpi` et `_Standalone_x64.lpi`.
+Les sorties sont `dist/i386-win32/` et `dist/x86_64-win64/`. Le script passe
+explicitement les cibles a FPC et lazbuild, et refuse un melange de fichiers.
+`--arch` n'installe pas les compilateurs, leurs unites ni TurboJPEG.
 
 macOS 12.3+, Xcode CLI tools, Lazarus Cocoa/FPC et archive TurboJPEG de la cible:
 

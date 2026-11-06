@@ -1,0 +1,59 @@
+test_real_coff_and_pe_x86_x64 (__main__.RealCoffFixtures.test_real_coff_and_pe_x86_x64) ... + clang -target i686-w64-windows-gnu -O2 -c /tmp/tmp921m5ctu/fixture.c -o /tmp/tmp921m5ctu/i386.o
++ llvm-ar rcs /tmp/tmp921m5ctu/i386.a /tmp/tmp921m5ctu/i386.o
++ nm -g /tmp/tmp921m5ctu/i386.a
++ objdump -f /tmp/tmp921m5ctu/i386.a
++ objdump -f /tmp/tmp921m5ctu/i386.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x86 /out:/tmp/tmp921m5ctu/i386.exe /tmp/tmp921m5ctu/i386.o
+REAL COFF/PE fixture checked, NOT executed: i386
++ clang -target x86_64-w64-windows-gnu -O2 -c /tmp/tmp921m5ctu/fixture.c -o /tmp/tmp921m5ctu/x86_64.o
++ llvm-ar rcs /tmp/tmp921m5ctu/x86_64.a /tmp/tmp921m5ctu/x86_64.o
++ nm -g /tmp/tmp921m5ctu/x86_64.a
++ objdump -f /tmp/tmp921m5ctu/x86_64.a
++ objdump -f /tmp/tmp921m5ctu/x86_64.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x64 /out:/tmp/tmp921m5ctu/x86_64.exe /tmp/tmp921m5ctu/x86_64.o
+ok
+test_archive_formats (__main__.Targets.test_archive_formats) ... ok
+test_c_target_mismatch_is_not_overridden (__main__.Targets.test_c_target_mismatch_is_not_overridden) ... ok
+test_c_targets_accept_both (__main__.Targets.test_c_targets_accept_both) ... ok
+test_check_toolchain_stops_before_native_work (__main__.Targets.test_check_toolchain_stops_before_native_work) ... REAL COFF/PE fixture checked, NOT executed: x86_64
+Cible demandee: i386-win32 (--arch x86)
+ok
+test_cli_contains_arch_choices (__main__.Targets.test_cli_contains_arch_choices) ... ok
+test_cross_os_not_silently_added (__main__.Targets.test_cross_os_not_silently_added) ... ok
+test_fpc_cannot_silently_ignore_requested_cpu (__main__.Targets.test_fpc_cannot_silently_ignore_requested_cpu) ... ok
+test_fpc_missing_target_is_explained (__main__.Targets.test_fpc_missing_target_is_explained) ... ok
+test_fpc_target_switches_used_for_queries (__main__.Targets.test_fpc_target_switches_used_for_queries) ... ok
+test_full_build_orchestration_mocked (__main__.Targets.test_full_build_orchestration_mocked)
+Assert actual main() commands/paths with simulated compiler replies. ... FPC et C annoncent la cible demandee; ar/nm et outils de liaison trouves.
+Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.
+Cible demandee: i386-win32 (--arch x86)
+
+Termine: executables dans /tmp/meshkvm arch 0c948f89/dist/i386-win32
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.
+Cible demandee: x86_64-win64 (--arch x64)
+ok
+test_incomplete_sdk_does_not_fallback_to_path (__main__.Targets.test_incomplete_sdk_does_not_fallback_to_path) ... ok
+test_linker_flags_and_lpi_quoting (__main__.Targets.test_linker_flags_and_lpi_quoting) ... ok
+test_native_x64 (__main__.Targets.test_native_x64) ... ok
+test_native_x86 (__main__.Targets.test_native_x86) ... ok
+test_other_system_native_preserved (__main__.Targets.test_other_system_native_preserved) ... ok
+test_pe_headers_reject_wrong_arch (__main__.Targets.test_pe_headers_reject_wrong_arch) ... ok
+test_prefixed_gcc_on_path_matches_arch (__main__.Targets.test_prefixed_gcc_on_path_matches_arch) ... ok
+test_prefixed_sdk_tools (__main__.Targets.test_prefixed_sdk_tools) ... ok
+test_projects_do_not_overwrite_other_arch (__main__.Targets.test_projects_do_not_overwrite_other_arch) ... ok
+test_sdk_folder_priority_and_spaces (__main__.Targets.test_sdk_folder_priority_and_spaces) ... ok
+test_unknown_arch_rejected (__main__.Targets.test_unknown_arch_rejected) ... ok
+test_wow64_python_not_used_as_target (__main__.Targets.test_wow64_python_not_used_as_target) ... ok
+test_x64_fpc_macro_preserved (__main__.Targets.test_x64_fpc_macro_preserved) ... ok
+test_x64_rejected_on_32bit_windows (__main__.Targets.test_x64_rejected_on_32bit_windows) ... ok
+test_x64_selected (__main__.Targets.test_x64_selected) ... ok
+test_x86_fpc_macro_is_cpu386 (__main__.Targets.test_x86_fpc_macro_is_cpu386) ... ok
+test_x86_selected_on_windows_x64 (__main__.Targets.test_x86_selected_on_windows_x64) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.963s
+
+OK
+
+Termine: executables dans /tmp/meshkvm arch 0c948f89/dist/x86_64-win64
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.

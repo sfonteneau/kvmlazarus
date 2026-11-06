@@ -33,17 +33,22 @@ module tiers trouve dans le repertoire courant.
 
 ## Build reproductible sur la cible, pas binaire universel
 
-Le script controle la cible de FPC (`-iTP`, `-iTO`) et celle du compilateur C.
-Il se limite a Linux x86_64/aarch64, macOS x86_64/aarch64 et Windows x64.
-Les architectures et les runtimes C ne sont pas interchangeables.
-`--prepare-only` ne requiert pas FPC mais ne valide pas le lien Pascal.
+Le script accepte `--arch x86` (i386-win32) ou `--arch x64` (x86_64-win64)
+sous Windows. Sans cette option, `native` conserve l'architecture de l'hote.
+Linux/macOS restent en compilation native x86_64/aarch64.
+Il controle FPC avec `-P<cpu> -T<os> -iTP/-iTO`, le triple de GCC et les
+formats des objets COFF de TurboJPEG. Les architectures et runtimes C ne sont
+pas interchangeables. `--prepare-only` peut fonctionner sans FPC; lorsqu'un
+FPC est explicitement indique ou trouve, sa cible est controlee, mais le lien
+Pascal n'est pas valide par cette preparation. Voir WINDOWS_X86_X64.md.
 
 Sous `native/static/<cpu>-<os>/`, le script cree les archives et les includes
 `kvm_standalone_features.inc`, `kvm_*_link.inc`. Le fichier de fonctionnalites
 est retire avant la preparation et recree seulement apres succes; une erreur
 ne doit pas laisser croire que les nouvelles options sont pretes.
 
-Chaque projet genere `_Standalone.lpi` utilise:
+Chaque projet genere `_Standalone.lpi` (Linux/macOS) ou
+`_Standalone_x86.lpi` / `_Standalone_x64.lpi` (Windows) utilise:
 
 - `-dKVM_STANDALONE`;
 - les chemins `-Fi`/`-Fl` de la cible preparee;
@@ -101,7 +106,7 @@ base pour une VM X11 sans ces composants.
 ## Windows
 
 Le profil autonome de base utilise GDI, les APIs Windows et TurboJPEG lie.
-Il exige une archive GCC/MinGW-w64 x64 compatible avec FPC, pas un `.lib`
+Il exige une archive GCC/MinGW de la cible x86 ou x64 compatible avec FPC, pas un `.lib`
 MSVC ni une archive d'import DLL. Les runtimes C de compilateurs differents
 ne sont pas automatiquement interchangeables.
 

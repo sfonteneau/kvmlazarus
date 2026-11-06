@@ -35,13 +35,13 @@ def invoke(argv: list[str]) -> str:
         raise RuntimeError('Inspection impossible: '+p.stdout)
     return p.stdout
 
-def inspect(path: Path) -> tuple[str,list[str],str]:
+def inspect(path: Path, objdump: str = 'objdump') -> tuple[str,list[str],str]:
     with path.open('rb') as f: head=f.read(4)
     if head == b'\x7fELF':
         data=invoke(['readelf','-d',str(path)])
         return 'ELF',re.findall(r'\(NEEDED\).*?\[(.*?)\]',data),data
     if head[:2] == b'MZ':
-        data=invoke(['objdump','-p',str(path)])
+        data=invoke([objdump,'-p',str(path)])
         return 'PE',re.findall(r'DLL Name:\s*(\S+)',data),data
     if head in [b'\xcf\xfa\xed\xfe',b'\xfe\xed\xfa\xcf',b'\xca\xfe\xba\xbe',b'\xbe\xba\xfe\xca']:
         data=invoke(['otool','-L',str(path)])
@@ -63,8 +63,9 @@ def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('binary',type=Path)
     p.add_argument('--report',type=Path)
+    p.add_argument('--objdump', default='objdump', help='Explicit MinGW/LLVM objdump path for PE files')
     args=p.parse_args()
-    kind,deps,data=inspect(args.binary)
+    kind,deps,data=inspect(args.binary,args.objdump)
     bad=violations(kind,deps)
     lines=['Executable: '+str(args.binary),'Format: '+kind,
       'Dependances directes:']+['  '+d for d in deps]
