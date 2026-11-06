@@ -31,6 +31,15 @@ fi
 OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options")
 printf '%s\n' "$OUTPUT" | grep -q '^LISTEN=127.0.0.1$'
 printf '%s\n' "$OUTPUT" | grep -q '^PORT=7900$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXWIDTH=32768$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXHEIGHT=32768$'
+OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --adaptive)
+printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=1$'
+OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --max-width 16000 --max-height 4000)
+printf '%s\n' "$OUTPUT" | grep -q '^MAXWIDTH=16000$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXHEIGHT=4000$'
+OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --max-width 16000 --native-resolution)
+printf '%s\n' "$OUTPUT" | grep -q '^MAXWIDTH=32768$'
 OUTPUT=$(env -u MESH_KVM_TOKEN "$TMP/test_client_options" --host 192.168.1.50 --port 7901 --token "$TOKEN" --tls)
 printf '%s\n' "$OUTPUT" | grep -q '^TLS=1$'
 printf '%s\n' "$OUTPUT" | grep -q '^HOST=192.168.1.50$'
@@ -68,7 +77,7 @@ if env -u MESH_KVM_TOKEN "$TMP/test_client_options" --host 'http://bad' --token 
 fi
 OUTPUT=$(env -u MESH_KVM_TOKEN -u MESH_KVM_VIEW_TOKEN "$TMP/test_server_options" --list-monitors)
 printf '%s\n' "$OUTPUT" | grep -q '^LISTMONITORS=1$'
-printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=1$'
+printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=0$'
 OUTPUT=$(env -u MESH_KVM_VIEW_TOKEN MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --monitor=2 --max-width 3840 --max-height=2160 --fps 30 --no-adaptive)
 printf '%s\n' "$OUTPUT" | grep -q '^MONITOR=2$'
 printf '%s\n' "$OUTPUT" | grep -q '^MAXWIDTH=3840$'
@@ -82,7 +91,7 @@ printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=0$'
 OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --fps 144 --quality 95)
 printf '%s\n' "$OUTPUT" | grep -q '^FPS=144$'
 printf '%s\n' "$OUTPUT" | grep -q '^QUALITY=95$'
-for BAD in '--fps 1001' '--fps -1' '--quality 0' '--quality 101' '--monitor -1' '--monitor 65' '--max-width 63' '--max-height 8193' '--max-width 8192 --max-height 8192'; do
+for BAD in '--fps 1001' '--fps -1' '--quality 0' '--quality 101' '--monitor -1' '--monitor 65' '--max-width 63' '--max-height 32769' '--max-width 32769'; do
   # Intentional word splitting: each BAD fixture contains separate arguments.
   if env -u MESH_KVM_VIEW_TOKEN MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" $BAD >/dev/null 2>&1; then
     echo "Invalid options unexpectedly accepted: $BAD" >&2; exit 1

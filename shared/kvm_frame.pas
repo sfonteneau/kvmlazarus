@@ -33,7 +33,7 @@ uses Math, kvm_wire;
 
 function AllocateFrame(var Frame: TRgbFrame; W, H: Integer): Boolean;
 begin
-  Result := (W >= 1) and (H >= 1) and (W <= 8192) and (H <= 8192) and
+  Result := (W >= 1) and (H >= 1) and (W <= KVM_MAX_FRAME_SIDE) and (H <= KVM_MAX_FRAME_SIDE) and
     (Int64(W) * H <= KVM_MAX_FRAME_PIXELS);
   if not Result then Exit;
   if (Frame.Width <> W) or (Frame.Height <> H) or
@@ -75,10 +75,20 @@ begin
   H := 0;
   Result := (SourceW > 0) and (SourceH > 0) and (MaxW > 0) and (MaxH > 0);
   if not Result then Exit;
+  // With the native defaults, a desktop exceeding the memory/protocol
+  // envelope must FAIL (not be silently resized to 32768 pixels).
+  if (MaxW = KVM_MAX_FRAME_SIDE) and (MaxH = KVM_MAX_FRAME_SIDE) and
+     ((SourceW > KVM_MAX_FRAME_SIDE) or (SourceH > KVM_MAX_FRAME_SIDE) or
+      (Int64(SourceW) * SourceH > KVM_MAX_FRAME_PIXELS)) then Exit(False);
   Factor := Min(1.0, Min(MaxW / SourceW, MaxH / SourceH));
   W := Max(1, Round(SourceW * Factor));
   H := Max(1, Round(SourceH * Factor));
-  Result := (W > 0) and (H > 0);
+  // Reject rather than silently shrink an otherwise native desktop beyond
+  // the protocol/memory safety envelope. Explicit smaller --max-* remains a
+  // deliberate downscale when requested by the administrator.
+  Result := (W > 0) and (H > 0) and
+    (W <= KVM_MAX_FRAME_SIDE) and (H <= KVM_MAX_FRAME_SIDE) and
+    (Int64(W) * H <= KVM_MAX_FRAME_PIXELS);
 end;
 
 function ResizeFrame(const Source: TRgbFrame; MaxW, MaxH: Integer;

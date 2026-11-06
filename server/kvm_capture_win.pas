@@ -5,7 +5,7 @@ uses Windows, kvm_frame;
 function CaptureDesktopRgb(MaxW, MaxH: Integer; var Frame: TRgbFrame): Boolean;
 procedure CloseCapture;
 implementation
-uses kvm_monitors, Math;
+uses kvm_monitors, kvm_wire, SysUtils, Math;
 const CAPTUREBLT_FLAG = $40000000;
 var
   ScreenDC, MemDC: HDC;
@@ -80,7 +80,11 @@ begin
   Result := False;
   if not RefreshMonitor then Exit;
   M := CaptureMonitor;
-  if not ScaledSize(M.Bounds.W, M.Bounds.H, MaxW, MaxH, W, H) then Exit;
+  if not ScaledSize(M.Bounds.W, M.Bounds.H, MaxW, MaxH, W, H) then
+    raise Exception.CreateFmt(
+      'Bureau %dx%d hors limites de capture (%d px par cote / %d pixels au total). '
+      + 'Recompiler x64 ou reduire volontairement --max-width/--max-height.',
+      [M.Bounds.W, M.Bounds.H, KVM_MAX_FRAME_SIDE, KVM_MAX_FRAME_PIXELS]);
   if not EnsureBuffer(W, H) then begin CloseCapture; Exit; end;
   if (W = M.Bounds.W) and (H = M.Bounds.H) then
     Result := BitBlt(MemDC, 0, 0, W, H, ScreenDC, M.Bounds.X, M.Bounds.Y,

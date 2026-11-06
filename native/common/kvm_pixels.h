@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
-#define KVM_MAX_SIDE 8192u
-#define KVM_MAX_PIXELS 16777216u
+#define KVM_MAX_SIDE 32768u
+#define KVM_MAX_PIXELS 67108864u
 static inline int kvm_dimensions(uint32_t w, uint32_t h) {
     return w && h && w <= KVM_MAX_SIDE && h <= KVM_MAX_SIDE &&
            (uint64_t)w*h <= KVM_MAX_PIXELS;

@@ -53,7 +53,10 @@ static void malformed_cases(void) {
         assert(dst[cap]==0x5e);
     }
     assert(!kvm_pixels_rgb(src,SIZE_MAX,SIZE_MAX-1,INT32_MIN,1,1,0,0,1,1,0,0,dst,256,1,1));
-    assert(!kvm_dimensions(8192,8192)); assert(kvm_dimensions(8192,2048));
+    assert(!kvm_dimensions(32768,32768));
+    assert(kvm_dimensions(15360,2160));
+    assert(kvm_dimensions(30720,2160));
+    assert(!kvm_dimensions(65535,1080));
 }
 /* Explicit native-size path coverage: padded rows, crop, both channel
  * orders and both stride signs, including a large desktop-like rectangle. */

@@ -34,7 +34,7 @@ begin
   Check(AllocateSurface(Surface,5,3),'Surface allocation');
   Surface.Pixels[1]:=#99;
   Check(Ord(Held.Pixels[1])=30,'Surface is not copy-on-write');
-  Check(not AllocateSurface(Surface,8192,8192),'Surface memory cap');
+  Check(not AllocateSurface(Surface,32768,32768),'Surface memory cap');
   Check(CaptureIsDue(100,0),'Initial capture');
   Check(NextCaptureTick(100,130,20)=150,'Capture deadline includes elapsed work');
   Check(NextCaptureTick(100,180,20)=180,'No catch-up burst');

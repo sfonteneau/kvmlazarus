@@ -48,7 +48,7 @@ function ValidKvmToken(const Value: string): Boolean;
 
 implementation
 
-uses kvm_security;
+uses kvm_security, kvm_wire;
 
 function IsUnsignedDecimal(const Value: string; out N: Integer): Boolean;
 var
@@ -151,14 +151,18 @@ begin
     '              [--tls-cert FILE] [--tls-key FILE]' + LineEnding +
     '              [--backend auto|x11|portal|gdi|dxgi|sck]' + LineEnding +
     '              [--monitor N] [--list-monitors]' + LineEnding +
-    '              [--max-width N --max-height N] [--no-adaptive]' + LineEnding +
+    '              [--native-resolution] [--max-width N --max-height N]' + LineEnding +
+    '              [--adaptive|--no-adaptive]' + LineEnding +
     '              [--encoder turbojpeg|auto|h264_nvenc|h264_qsv|' + LineEnding +
     '                         h264_amf|h264_vaapi|h264_videotoolbox]' + LineEnding +
     '              [--bitrate-kbps 128..100000] [--gpu-device DEVICE]' + LineEnding +
     '              [--session-policy strict|backend] [--metrics-csv FILE]' + LineEnding +
     '              [--allow-insecure] (explicite pour ws distant, VPN requis)' + LineEnding +
     '--fps 0 : cadence libre (limitee par la capture, le CPU et les ACK).' + LineEnding +
-    '--no-adaptive : evite la baisse automatique de qualite/resolution.' + LineEnding +
+    'Resolution native par defaut, y compris le bureau multi-ecrans.' + LineEnding +
+    '--max-width/--max-height : reduction optionnelle de resolution.' + LineEnding +
+    '--adaptive : autorise la baisse de resolution/qualite si ACK lents.' + LineEnding +
+    'Limite de securite : 32768 pixels par cote, 67 108 864 pixels en tout.' + LineEnding +
     'Par defaut : --listen 127.0.0.1 --port 7900 --fps 3 --quality 65' + LineEnding +
     'Token : --token SECRET ou MESH_KVM_TOKEN (16+ caracteres).' + LineEnding +
     '--control + --token : controle. --view-token / MESH_KVM_VIEW_TOKEN : vision.' + LineEnding +
@@ -202,8 +206,11 @@ begin
   Options.FPS := 0;
   Options.Quality := 0;
   Options.AllowControl := False;
-  Options.Adaptive := True; Options.ListMonitors := False;
-  Options.MaxWidth := 1920; Options.MaxHeight := 1080; Options.Monitor := 0;
+  // Native dimensions are the default. Limits below are protocol/memory
+  // guards, not an automatic scale to 1080p. Adaptation is opt-in.
+  Options.Adaptive := False; Options.ListMonitors := False;
+  Options.MaxWidth := KVM_MAX_FRAME_SIDE;
+  Options.MaxHeight := KVM_MAX_FRAME_SIDE; Options.Monitor := 0;
   Options.Listen := '127.0.0.1';
   Options.Port := 7900;
   Options.FPS := 3;
@@ -251,6 +258,12 @@ begin
     end
     else if A = '--list-monitors' then Options.ListMonitors := True
     else if A = '--no-adaptive' then Options.Adaptive := False
+    else if A = '--adaptive' then Options.Adaptive := True
+    else if A = '--native-resolution' then
+    begin
+      Options.MaxWidth := KVM_MAX_FRAME_SIDE;
+      Options.MaxHeight := KVM_MAX_FRAME_SIDE;
+    end
     else if (A = '--backend') or (Copy(A, 1, 10) = '--backend=') then
     begin
       if not ReadValue('--backend', I, V, ErrorText) then Exit;
@@ -313,15 +326,15 @@ begin
     else if (A = '--max-width') or (Copy(A, 1, 12) = '--max-width=') then
     begin
       if not ReadValue('--max-width', I, V, ErrorText) then Exit;
-      if not IsUnsignedDecimal(V, N) or (N < 64) or (N > 8192) then
-      begin ErrorText := '--max-width doit etre entre 64 et 8192'; Exit; end;
+      if not IsUnsignedDecimal(V, N) or (N < 64) or (N > KVM_MAX_FRAME_SIDE) then
+      begin ErrorText := '--max-width doit etre entre 64 et 32768'; Exit; end;
       Options.MaxWidth := N;
     end
     else if (A = '--max-height') or (Copy(A, 1, 13) = '--max-height=') then
     begin
       if not ReadValue('--max-height', I, V, ErrorText) then Exit;
-      if not IsUnsignedDecimal(V, N) or (N < 64) or (N > 8192) then
-      begin ErrorText := '--max-height doit etre entre 64 et 8192'; Exit; end;
+      if not IsUnsignedDecimal(V, N) or (N < 64) or (N > KVM_MAX_FRAME_SIDE) then
+      begin ErrorText := '--max-height doit etre entre 64 et 32768'; Exit; end;
       Options.MaxHeight := N;
     end
     else if (A = '--fps') or (Copy(A, 1, 6) = '--fps=') then
@@ -351,8 +364,9 @@ begin
     end;
     Inc(I);
   end;
-  if Int64(Options.MaxWidth) * Options.MaxHeight > 16777216 then
-  begin ErrorText := 'Resolution limitee a 16 777 216 pixels'; Exit; end;
+  // MaxWidth/MaxHeight are independent OPTIONAL downscale bounds; the
+  // physical capture dimensions are validated against the pixel safety cap.
+  // Rejecting the PRODUCT of these maxima breaks native multi-monitor mode.
   if Options.ListMonitors then Exit(True);
   if not KvmLoopbackHost(Options.Listen) and (Options.TLSCert='') and not Options.AllowInsecure then
   begin ErrorText:='Ecoute distante sans TLS refusee. Configurer TLS ou --allow-insecure derriere un VPN.'; Exit; end;

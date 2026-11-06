@@ -87,8 +87,8 @@ int kvm_sck_open(uint32_t display, int width, int height, int fps,
                  void **handle, char *error, int error_capacity) {
     @autoreleasepool {
         if (handle) *handle = NULL;
-        if (!handle || width < 1 || height < 1 || width > 8192 || height > 8192 ||
-            (uint64_t)width*height > 16777216 || fps < 1 || fps > 30) return -1;
+        if (!handle || width < 1 || height < 1 || width > 32768 || height > 32768 ||
+            (uint64_t)width*height > 67108864 || fps < 1 || fps > 30) return -1;
         if (@available(macOS 12.3, *)) {
             __block SCShareableContent *content = nil;
             __block NSError *queryError = nil;

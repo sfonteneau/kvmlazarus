@@ -16,8 +16,8 @@
 #include <libavutil/dict.h>
 #include <libswscale/swscale.h>
 
-#define MAX_SIDE 8192
-#define MAX_PIXELS 16777216LL
+#define MAX_SIDE 32768
+#define MAX_PIXELS 67108864LL
 #define ABI 0x00090001u
 static int error_code(char *e,size_t cap,const char *where,int code) {
   char msg[AV_ERROR_MAX_STRING_SIZE]; av_strerror(code,msg,sizeof(msg));

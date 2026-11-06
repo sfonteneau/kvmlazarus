@@ -4,6 +4,7 @@ interface
 uses kvm_frame;
 function RgbBitmapBytes(const Frame: TRgbFrame): RawByteString;
 implementation
+uses kvm_wire;
 procedure Put16(var S: RawByteString; At: Integer; V: Word);
 begin S[At]:=AnsiChar(V and 255); S[At+1]:=AnsiChar(V shr 8); end;
 procedure Put32(var S: RawByteString; At: Integer; V: Cardinal);
@@ -13,8 +14,8 @@ function RgbBitmapBytes(const Frame: TRgbFrame): RawByteString;
 var Stride,Size,X,Y,Src,Dst: Integer;
 begin
   Result:='';
-  if (Frame.Width<1) or (Frame.Height<1) or (Frame.Width>8192) or (Frame.Height>8192) or
-     (Int64(Frame.Width)*Frame.Height>16777216) or
+  if (Frame.Width<1) or (Frame.Height<1) or (Frame.Width>KVM_MAX_FRAME_SIDE) or (Frame.Height>KVM_MAX_FRAME_SIDE) or
+     (Int64(Frame.Width)*Frame.Height>KVM_MAX_FRAME_PIXELS) or
      (Length(Frame.RGB)<>Int64(Frame.Width)*Frame.Height*3) then Exit;
   Stride:=(Frame.Width*3+3) and not 3; Size:=54+Stride*Frame.Height;
   SetLength(Result,Size); FillChar(Result[1],Size,0);

@@ -13,8 +13,10 @@ const
   // mORMot2.ServerUpgrade removes the initial slash before CloneByName/UpgradeUri.
   KVM_WS_ROUTE = 'kvm';
   KVM_MAX_JPEG_BYTES = 2 * 1024 * 1024; // per dirty rectangle
-  KVM_MAX_FRAME_SIDE = 8192;
-  KVM_MAX_FRAME_PIXELS = 16777216; // prevent huge viewer bitmaps
+  // Native multi-monitor virtual desktops (e.g. 8 x 3840x2160) are accepted.
+  // Safety envelope only: u16 wire coordinates, and bounded RGB/BGRX memory.
+  KVM_MAX_FRAME_SIDE = 32768;
+  KVM_MAX_FRAME_PIXELS = 67108864; // 64M pixels; 256 MiB per BGRX surface
   KVM_MAX_TEXT_BYTES = 1024;
   KVM_MAX_TEXT_SCALARS = 256;
   KVM_TILE_SIZE = 256;

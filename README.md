@@ -240,3 +240,12 @@ Le profil `--quality 100 --fps 0 --no-adaptive --max-width 3840
 --max-height 2160` evite les plafonds de 90/30 et la reduction de qualite
 adaptative, tout en conservant le controle de flux et les limites memoire.
 Voir `docs/LAN_QUALITE_FPS_LIBRES.md` pour les conditions et limites reelles.
+
+### Resolution native multi-ecrans (profil recent)
+
+Sous Windows, `--monitor 0` capture le bureau virtuel complet. La resolution
+native est maintenant conservee par defaut, sans les anciennes limites de
+1920x1080. `--max-width` / `--max-height` deviennent des reductions
+optionnelles ; `--adaptive` reactivera explicitement l'adaptation de qualite.
+Les garde-fous memoire/protocole sont de 32768 pixels par axe et 67108864
+pixels par image. Voir `docs/RESOLUTION_NATIVE_MULTI_ECRANS.md`.

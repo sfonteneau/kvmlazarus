@@ -11,10 +11,10 @@
 /* Allocation envelope only, not SPS validation. Visible dimensions are
  * checked again after decode. H.264 allocation may include macroblock padding. */
 static int kvm_h264_allocation_ok(int w,int h,int expected_w,int expected_h) {
-  if(expected_w<2 || expected_h<2 || expected_w>8192 || expected_h>8192 ||
-     (int64_t)expected_w*expected_h>16777216 || w<expected_w || h<expected_h)
+  if(expected_w<2 || expected_h<2 || expected_w>32768 || expected_h>32768 ||
+     (int64_t)expected_w*expected_h>67108864 || w<expected_w || h<expected_h)
     return 0;
-  return w<=8192 && h<=8192 && (int64_t)w*h<=16777216 &&
+  return w<=32768 && h<=32768 && (int64_t)w*h<=67108864 &&
          w<=((expected_w+15)&~15) && h<=((expected_h+31)&~31);
 }
 static int kvm_startcode(const uint8_t *p, size_t n, size_t i) {

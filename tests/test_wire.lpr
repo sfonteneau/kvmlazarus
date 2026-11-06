@@ -24,7 +24,7 @@ begin
   S := MakeScreen(1600, 900);
   Check(ReadScreen(S, W, H) and (W = 1600) and (H = 900), 'screen');
   Check(not ReadScreen('S' + #0 + #0 + #0 + #0, W, H), 'empty screen');
-  Check(not ReadScreen(MakeScreen(8192, 8192), W, H), 'oversized bitmap');
+  Check(not ReadScreen(MakeScreen(32768, 32768), W, H), 'oversized bitmap safety guard');
 
   Jpeg := #$ff + #$d8 + #$ff + #$d9;
   S := MakeTile(256, 512, 768, 400, Jpeg);

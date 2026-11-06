@@ -309,7 +309,7 @@ API int kvm_portal_open(int control,int fps,void **out,char *error,int cap) {
         SPA_FORMAT_VIDEO_format,SPA_POD_CHOICE_ENUM_Id(4,SPA_VIDEO_FORMAT_BGRx,
             SPA_VIDEO_FORMAT_BGRA,SPA_VIDEO_FORMAT_RGBx,SPA_VIDEO_FORMAT_RGBA),
         SPA_FORMAT_VIDEO_size,SPA_POD_CHOICE_RANGE_Rectangle(
-            &SPA_RECTANGLE(1920,1080),&SPA_RECTANGLE(1,1),&SPA_RECTANGLE(8192,8192)),
+            &SPA_RECTANGLE(1920,1080),&SPA_RECTANGLE(1,1),&SPA_RECTANGLE(32768,32768)),
         SPA_FORMAT_VIDEO_framerate,SPA_POD_CHOICE_RANGE_Fraction(
             &SPA_FRACTION(fps,1),&SPA_FRACTION(0,1),&SPA_FRACTION(fps,1)));
     if (pw_stream_connect(p->stream,PW_DIRECTION_INPUT,p->serial ? PW_ID_ANY : p->node,
@@ -353,7 +353,15 @@ API int kvm_portal_read(void *handle,uint8_t *dst,size_t capacity,int maxw,int m
     w=(uint32_t)(p->width*scale); h=(uint32_t)(p->height*scale);
     if (!w) w=1;
     if (!h) h=1;
-    if (!kvm_dimensions(w,h) || (uint64_t)w*h*3>capacity) { g_mutex_unlock(&p->pixels_lock); return -1; }
+    if (!kvm_dimensions(w,h)) {
+        error_text(error,cap,"PipeWire frame exceeds MeshKVM pixel safety limit");
+        g_mutex_unlock(&p->pixels_lock); return -1;
+    }
+    *width=(int)w; *height=(int)h;
+    if ((uint64_t)w*h*3>capacity) {
+        /* Request only the real output buffer, not maxw*maxh. */
+        g_mutex_unlock(&p->pixels_lock); return -2;
+    }
     for (y=0;y<h;y++) for (x=0;x<w;x++) {
         size_t src=((size_t)((uint64_t)y*p->height/h)*p->width+(size_t)((uint64_t)x*p->width/w))*3;
         memcpy(dst+((size_t)y*w+x)*3,p->rgb+src,3);

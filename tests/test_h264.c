@@ -9,7 +9,8 @@ int main(void) {
   assert(kvm_h264_allocation_ok(640,368,640,360));
   assert(!kvm_h264_allocation_ok(1920,1120,1920,1080));
   assert(!kvm_h264_allocation_ok(1920,1080,1920,1088));
-  assert(!kvm_h264_allocation_ok(8192,8192,8192,8192));
+  assert(!kvm_h264_allocation_ok(32768,32768,32768,32768));
+  assert(kvm_h264_allocation_ok(15360,2160,15360,2160));
   /* Syntax fixtures only: these NAL payloads are not decodable pictures. */
   const uint8_t annex[]={0,0,0,1,0x67,0x42,0,0,1,0x68,0xab,0,0,0,1,0x65,0xaa};
   const uint8_t avcc[]={1,66,0,30,255,225,0,2,0x67,0x42,1,0,2,0x68,0xab};

@@ -7,7 +7,7 @@ uses
   SysUtils, mormot.lib.openssl11, kvm_server, kvm_desktop, kvm_cli, kvm_monitors,
   {$IFDEF UNIX}BaseUnix, ctypes,{$ENDIF}
   {$IFDEF WINDOWS}Windows,{$ENDIF}
-  kvm_build_info, Classes;
+  kvm_build_info, kvm_wire, Classes;
 
 var
   Server: TKvmServer;
@@ -86,8 +86,14 @@ begin
     else
       WriteLn('Diffusion JPEG/H264 selon codec negocie ; ', Options.FPS,
         ' images/s demandees ; qualite JPEG ', Options.Quality);
-    WriteLn('Resolution maximale du profil haut : ', Options.MaxWidth, 'x',
-      Options.MaxHeight, ' ; TurboJPEG : 4:4:4 (DCT standard)');
+    if (Options.MaxWidth = KVM_MAX_FRAME_SIDE) and
+       (Options.MaxHeight = KVM_MAX_FRAME_SIDE) then
+      WriteLn('Resolution : NATIVE (bureau multi-ecrans, sans redimensionnement impose)')
+    else
+      WriteLn('Resolution : limites explicites ', Options.MaxWidth, 'x',
+        Options.MaxHeight);
+    WriteLn('Securite dimensions : ', KVM_MAX_FRAME_SIDE, ' par cote ; ',
+      KVM_MAX_FRAME_PIXELS, ' pixels ; JPEG 4:4:4');
     if Options.Adaptive then
       WriteLn('Adaptation : ACTIVE (resolution/qualite reduites si ACK lents)')
     else

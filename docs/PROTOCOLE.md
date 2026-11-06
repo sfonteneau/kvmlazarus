@@ -61,7 +61,7 @@ pas d'image P/B faisant reference a un lot precedent. Les conversions AVCC/Annex
 sont bornees. Le scan de NAL n'est pas une validation semantique H.264 : celle-ci
 reste confiee au decodeur FFmpeg, avec contraintes de dimensions/allocation.
 
-Ecran <=8192 par axe et <=16 777 216 pixels. Le callback d'allocation H.264 accepte
+Ecran <=32768 par axe et <=67 108 864 pixels (garde-fous memoire). Le callback d'allocation H.264 accepte
 un petit padding de macroblocs, puis les dimensions visibles sont exigees exactes
 au retour du decodeur. Pas de HDR ni de decodage arbitraire de conteneurs/media.
 `C` sert au curseur de secours X11 sans XFixes ; normalement le curseur est inclus

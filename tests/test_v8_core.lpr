@@ -34,7 +34,7 @@ begin
 
   F.Width:=4; F.Height:=4; F.RGB:=''; G:=F;
   Check(RegionTileChanged(F,G,0,0,4,4),'malformed RGB never dereferenced');
-  Check(not AllocateFrame(F,8192,8192),'one frame allocation matches protocol limit');
+  Check(not AllocateFrame(F,32768,32768),'one frame allocation matches protocol limit');
   Check(AllocateFrame(F,4,4),'small frame');
   for I:=1 to Length(F.RGB) do F.RGB[I]:=#100;
   G:=F; SetLength(Pixels,1); Pixels[0]:=$80800000;

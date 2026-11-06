@@ -16,11 +16,13 @@ restent identiques. Aucune DLL supplémentaire n’est nécessaire.
 - `--fps 1..1000` permet une fréquence de capture cible ; la minuterie du
   planificateur utilise des millisecondes. Au-delà de 1000, le réglage n’a pas
   de sens avec ce planificateur.
-- `--no-adaptive` conserve **la qualité/résolution choisies**. Sans cette option,
-  les profils adaptatifs peuvent diminuer les deux lorsque les ACK ralentissent.
-- Les plafonds de résolution restent **inchangés** : 1920×1080 par défaut,
-  jusqu’à 8192 par côté et **16 777 216 pixels par image** selon le protocole.
-  Pour un écran 4K, utiliser `--max-width 3840 --max-height 2160`.
+- `--no-adaptive` conserve **la qualité/résolution choisies** ; c'est maintenant
+  le comportement par defaut. `--adaptive` reactive explicitement les profils
+  adaptatifs qui diminuent la qualité et la résolution si les ACK ralentissent.
+- La capture est désormais **native par défaut**, sans plafond de redimensionnement
+  1920×1080. Les garde-fous mémoire internes sont de 32768 pixels par côté et
+  **67 108 864 pixels par image**. `--max-width`/`--max-height` ne servent qu'à
+  demander volontairement une réduction.
 
 ## Commande Windows GDI — qualité et cadence libres
 
