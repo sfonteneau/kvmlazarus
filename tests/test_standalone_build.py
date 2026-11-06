@@ -83,6 +83,9 @@ class BuildHelpers(unittest.TestCase):
         p=subprocess.run([sys.executable,ROOT/'build/build_standalone.py','--help'],capture_output=True,text=True)
         self.assertEqual(p.returncode,0)
         self.assertIn('--with-portal',p.stdout)
+        self.assertIn('--mormot-dir',p.stdout)
+        self.assertNotIn('--fix-mormot-msi',p.stdout)
+        self.assertNotIn('fix_mormot_msi_import',p.stdout)
     @unittest.skipUnless(shutil.which('cc') and shutil.which('ar') and shutil.which('nm'),'C toolchain absent')
     def test_static_session_archive_and_symbols(self):
         with tempfile.TemporaryDirectory() as tmp:

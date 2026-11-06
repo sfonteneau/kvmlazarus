@@ -60,11 +60,10 @@ def violations(kind: str, deps: list[str]) -> list[str]:
     return bad
 
 def invalid_imports(kind: str, details: str) -> list[str]:
-    # Check imported *symbols* as well as DLL names. The upstream mORMot2
-    # source has declared MsiEnumProductA (missing the final 's'), which
-    # causes a load-time error despite importing only the system msi.dll.
+    # Read-only safety check: a system DLL may be present but an imported
+    # symbol can still be absent. Never modify upstream sources here.
     if kind == 'PE' and re.search(r'(?<![A-Za-z0-9_])MsiEnumProductA(?![A-Za-z0-9_])', details):
-        return ['MsiEnumProductA : entree MSI inexistante (corriger mormot.lib.sspi.pas)']
+        return ['MsiEnumProductA : entree MSI inexistante (mettre a jour les dependances et recompiler)']
     return []
 
 

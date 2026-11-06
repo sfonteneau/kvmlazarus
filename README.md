@@ -180,3 +180,11 @@ lors de ta distribution. Les journaux precedents et le README historique dans
 **Liaison statique Windows MinGW/FPC :** voir `docs/LIEN_STATIQUE_WINDOWS_FPC_MINGW.md` pour le conflit `_tls_used`, les imports WinAPI et le groupe de bibliotheques genere.
 
 Correctif liaison Windows : `docs/CORRECTIF_WINCRT_ARCHIVE.md` (suppression du script GNU ld GROUP, vraie archive ar CRT).
+
+## mORMot2 amont (sans patch local)
+
+Le constructeur ne modifie plus `mormot.lib.sspi.pas`. Le correcteur MSI
+local et `--fix-mormot-msi` ont ete retires. `--mormot-dir` continue a
+selectionner et reconstruire le paquet mORMot2 utilise par Lazarus.
+L'audit final des imports reste actif en lecture seule.
+Voir `docs/INTEGRATION_MORMOT2_AMONT.md`.

@@ -42,10 +42,9 @@ build_standalone_windows.cmd ^
   --mormot-dir "C:\tranquilit\mORMot2"
 ```
 
-`--mormot-dir` verifie que `src/lib/mormot.lib.sspi.pas` utilise la bonne
-fonction `MsiEnumProductsA` et enregistre le paquet de cette copie avant de
-reconstruire ses unites. Si le source n'est pas deja corrige, ajouter
-`--fix-mormot-msi` (ce drapeau effectue une sauvegarde avant modification).
+`--mormot-dir` selectionne le paquet mORMot2 de cette copie, l'enregistre
+aupres de Lazarus puis reconstruit ses unites. Le script MeshKVM ne modifie ni
+ne verifie les sources de mORMot2 : utiliser une version amont a jour.
 
 L'auditeur reste strict : il rejette l'import inexistant `MsiEnumProductA`,
 ainsi que les DLL MinGW/TurboJPEG privees. Le test local ne remplace pas
