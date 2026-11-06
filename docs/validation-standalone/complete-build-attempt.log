@@ -1,0 +1,2 @@
++ /usr/bin/cc -dumpmachine
+ERREUR: Outil absent: fpc. Installer les outils de compilation, pas seulement les runtimes.

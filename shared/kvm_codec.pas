@@ -1,5 +1,6 @@
 unit kvm_codec;
 {$mode objfpc}{$H+}
+{$I kvm_build.inc}
 interface
 uses SysUtils, Dynlibs, ctypes, kvm_frame;
 function CodecAvailable(out Reason: string): Boolean;
@@ -19,7 +20,7 @@ type
     function Decode(const Data: RawByteString; W,H: Integer; var Frame: TRgbFrame; out Reason: string): Boolean;
   end;
 implementation
-uses kvm_extwire;
+uses {$IFDEF KVM_STATIC_CODEC}kvm_codec_static,{$ENDIF} kvm_extwire;
 type
   PKvmSize = ^csize_t;
   TAbi = function: cuint32; cdecl;
@@ -33,6 +34,7 @@ type
 var
   Lib: TLibHandle = NilHandle;
   Lock: TRTLCriticalSection;
+  LinkedReady: Boolean = False;
   EncoderOpen: TEncoderOpen; EncodeProc: TEncode; EncoderClose: TClose;
   DecoderOpen: TDecoderOpen; DecodeProc: TDecode; DecoderClose: TClose;
 function CodecAvailable(out Reason: string): Boolean;
@@ -41,6 +43,21 @@ begin
   EnterCriticalSection(Lock);
   try
     Reason:='';
+    {$IFDEF KVM_STANDALONE}
+      {$IFDEF KVM_STATIC_CODEC}
+      if LinkedReady then Exit(True);
+      Abi:=@KvmCodecAbi;
+      EncoderOpen:=@KvmEncoderOpen; Pointer(EncodeProc):=@KvmEncode;
+      EncoderClose:=@KvmEncoderClose; DecoderOpen:=@KvmDecoderOpen;
+      DecodeProc:=@KvmDecode; DecoderClose:=@KvmDecoderClose;
+      Result:=Abi()=$00090001; LinkedReady:=Result;
+      if not Result then Reason:='ABI codec integre incompatible';
+      Exit;
+      {$ELSE}
+      Reason:='H264 non integre a ce build autonome (recompiler avec --with-codec). JPEG disponible.';
+      Exit(False);
+      {$ENDIF}
+    {$ELSE}
     if Lib<>NilHandle then Exit(True);
     {$IFDEF WINDOWS}Name:='meshkvm_codec.dll';{$ENDIF}
     {$IFDEF LINUX}Name:='libmeshkvm_codec.so';{$ENDIF}
@@ -60,6 +77,7 @@ begin
       Assigned(EncoderClose) and Assigned(DecoderOpen) and Assigned(DecodeProc) and Assigned(DecoderClose);
     if Result then Result:=Abi()=$00090001;
     if not Result then begin UnloadLibrary(Lib); Lib:=NilHandle; Reason:='ABI codec incompatible'; end;
+    {$ENDIF}
   finally LeaveCriticalSection(Lock); end;
 end;
 constructor TKvmH264Encoder.Create(const Name,Device: string; W,H,FPS,Kbps: Integer);

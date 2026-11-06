@@ -58,7 +58,7 @@ for name, path in units.items():
     check(bool(re.search(r"\bunit\s+" + re.escape(name) + r"\s*;", source, re.I)), str(path))
     check(source.rstrip().lower().endswith("end."), f"Unit has no terminator: {path}")
     for uses in re.findall(r"\buses\s+(.*?);", source, re.S | re.I):
-        for dependency in re.findall(r"\bkvm_[a-z0-9_]+\b", uses, re.I):
+        for dependency in re.findall(r"\bkvm_[a-z0-9_]+\b", re.sub(r"\{\$[^}]*\}", "", uses), re.I):
             check(dependency.lower() in units, f"Unknown unit {dependency}: {path}")
 
 for path in ROOT.rglob("*.lpi"):

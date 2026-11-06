@@ -1,6 +1,7 @@
 unit kvm_turbojpeg_decode;
 
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 
 // Optional libjpeg-turbo fast path for Lazarus clients.
 // The decoder writes a bottom-up BGR24 BMP into a reusable bounded buffer.
@@ -34,7 +35,7 @@ type
 
 implementation
 
-uses kvm_wire;
+uses {$IFDEF KVM_STANDALONE}kvm_turbojpeg_static,{$ENDIF} kvm_wire;
 
 const
   TJPF_BGR = 1;
@@ -55,6 +56,7 @@ begin
 end;
 
 constructor TKvmTurboJpegDecoder.Create;
+{$IFNDEF KVM_STANDALONE}
 const
   {$IFDEF WINDOWS}
   Candidates: array[0..1] of string = ('turbojpeg.dll', 'libturbojpeg.dll');
@@ -71,10 +73,17 @@ const
   {$ENDIF}
 var
   I: Integer;
+{$ENDIF}
 begin
   inherited Create;
   FLibrary := NilHandle;
   FHandle := nil;
+  {$IFDEF KVM_STANDALONE}
+  FInit := @KvmTjInitDecompress;
+  FDestroy := @KvmTjDestroy;
+  FHeader := @KvmTjHeader;
+  FDecompress := @KvmTjDecompress;
+  {$ELSE}
   for I := Low(Candidates) to High(Candidates) do
   begin
     FLibrary := LoadLibrary(Candidates[I]);
@@ -85,11 +94,12 @@ begin
   Pointer(FDestroy) := GetProcedureAddress(FLibrary, 'tjDestroy');
   Pointer(FHeader) := GetProcedureAddress(FLibrary, 'tjDecompressHeader3');
   Pointer(FDecompress) := GetProcedureAddress(FLibrary, 'tjDecompress2');
+  {$ENDIF}
   if Assigned(FInit) and Assigned(FDestroy) and Assigned(FHeader) and
      Assigned(FDecompress) then FHandle := FInit();
   if FHandle = nil then
   begin
-    UnloadLibrary(FLibrary);
+    if FLibrary <> NilHandle then UnloadLibrary(FLibrary);
     FLibrary := NilHandle;
   end;
 end;

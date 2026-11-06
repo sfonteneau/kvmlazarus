@@ -14,7 +14,11 @@
 #include <algorithm>
 #include "../common/kvm_pixels.h"
 using Microsoft::WRL::ComPtr;
+#ifdef KVM_STATIC_BUILD
+#define API extern "C"
+#else
 #define API extern "C" __declspec(dllexport)
+#endif
 struct Capture {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;

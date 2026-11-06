@@ -4,7 +4,7 @@ program MeshKVMClient;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Dialogs, SysUtils, kvm_cli, kvm_view_form, kvm_client_log;
+  Interfaces, Forms, Dialogs, SysUtils, kvm_cli, kvm_view_form, kvm_client_log, kvm_build_info;
 
 var
   MainForm: TKvmViewForm;
@@ -13,6 +13,7 @@ var
   ShowHelp: Boolean;
 begin
   KvmClientLog('[client] Demarrage MeshKVMClient');
+  KvmClientLog('[client] Build : '+KvmBuildDescription);
   Application.Initialize;
   if not ParseClientOptions(Options, ErrorText, ShowHelp) then
   begin

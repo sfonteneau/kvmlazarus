@@ -34,11 +34,20 @@ API void meshkvm_session_close(void *opaque) {
   if(s->bus && s->bus_unref) s->bus_unref(s->bus);
   free(s->session); free(s->path); if(s->lib) dlclose(s->lib); free(s);
 }
-API void *meshkvm_session_open(void) {
-  KvmSession *s=calloc(1,sizeof(*s)); if(!s) return NULL;
+API void *meshkvm_session_open_ex(char *error, size_t capacity) {
+  if(error && capacity) error[0]=0;
+  KvmSession *s=calloc(1,sizeof(*s));
+  if(!s) { if(error && capacity) snprintf(error,capacity,"allocation impossible"); return NULL; }
   s->lib=dlopen("libsystemd.so.0",RTLD_NOW|RTLD_LOCAL);
-  if(!s->lib) goto fail;
-#define GET(field,name) do { *(void **)(&s->field)=dlsym(s->lib,name); if(!s->field) goto fail; } while(0)
+  if(!s->lib) {
+    const char *e=dlerror();
+    if(error && capacity) snprintf(error,capacity,"libsystemd.so.0: %s", e?e:"chargement impossible");
+    goto fail;
+  }
+#define GET(field,name) do { \
+  *(void **)(&s->field)=dlsym(s->lib,name); \
+  if(!s->field) { if(error && capacity) snprintf(error,capacity,"libsystemd.so.0: symbole %s absent",name); goto fail; } \
+} while(0)
   GET(pid_session,"sd_pid_get_session"); GET(session_uid,"sd_session_get_uid");
   GET(session_class,"sd_session_get_class"); GET(open_system,"sd_bus_open_system");
   GET(bus_unref,"sd_bus_unref"); GET(timeout,"sd_bus_set_method_call_timeout");
@@ -47,6 +56,9 @@ API void *meshkvm_session_open(void) {
 #undef GET
   return s;
 fail: meshkvm_session_close(s); return NULL;
+}
+API void *meshkvm_session_open(void) {
+  return meshkvm_session_open_ex(NULL,0);
 }
 /* states: 0 unknown, 1 active, 2 locked, 3 inactive, 4 different user/session.
  * The identity string is only local session metadata, never a credential.

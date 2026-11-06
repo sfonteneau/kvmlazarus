@@ -1,0 +1,16 @@
+# Local build products, not distributable source dependencies
+__pycache__/
+*.pyc
+server/lib/
+client/lib/
+native/static/*/
+dist/
+server/*_Standalone.lpi
+client/*_Standalone.lpi
+*.ppu
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.exe

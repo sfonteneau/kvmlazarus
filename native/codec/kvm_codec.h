@@ -2,7 +2,9 @@
 #define MESHKVM_CODEC_H
 #include <stddef.h>
 #include <stdint.h>
-#ifdef _WIN32
+#ifdef KVM_STATIC_BUILD
+# define KVM_API
+#elif defined(_WIN32)
 # define KVM_API __declspec(dllexport)
 #else
 # define KVM_API __attribute__((visibility("default")))

@@ -1,5 +1,6 @@
 unit kvm_session_guard;
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 interface
 uses SysUtils, kvm_extwire;
 function ConfigureSessionGuard(const Policy: string; out Reason: string): Boolean;
@@ -9,6 +10,7 @@ procedure SessionGuardState(out State: Byte; out Epoch: Cardinal);
 procedure CloseSessionGuard;
 implementation
 uses Dynlibs, ctypes,
+  {$IFDEF KVM_STANDALONE}{$IFDEF LINUX}kvm_session_static,{$ENDIF}{$ENDIF}
   {$IFDEF WINDOWS}kvm_windows_session,{$ENDIF}
   {$IFDEF DARWIN}kvm_capture_mac,{$ENDIF}
   Classes;
@@ -30,10 +32,27 @@ var
   GuardPoll: TGuardPoll;
   GuardClose: TGuardClose;
 function ConfigureSessionGuard(const Policy: string; out Reason: string): Boolean;
-{$IFDEF LINUX}var Name: string; Abi: TGuardAbi; OpenGuard: TGuardOpen;{$ENDIF}
+{$IFDEF LINUX}
+var Name: string; Abi: TGuardAbi; OpenGuard: TGuardOpen;
+  {$IFDEF KVM_STANDALONE}NativeError: array[0..511] of AnsiChar;{$ENDIF}
+{$ENDIF}
 begin
+  CloseSessionGuard;
   Strict:=Policy='strict'; Reason:=''; Result:=True;
+  State:=KVM_SESSION_UNKNOWN; LastPoll:=0; InitialIdentity:=''; IdentityChanged:=False;
   {$IFDEF LINUX}
+  {$IFDEF KVM_STANDALONE}
+  Abi:=@KvmSessionAbi; OpenGuard:=@KvmSessionOpen;
+  GuardPoll:=@KvmSessionPoll; GuardClose:=@KvmSessionClose;
+  Result:=Abi()=$00090001;
+  if Result then
+  begin
+    FillChar(NativeError,SizeOf(NativeError),0);
+    Handle:=KvmSessionOpenEx(@NativeError[0],SizeOf(NativeError));
+    Result:=Handle<>nil;
+    if not Result then Reason:='Garde integre: '+string(PAnsiChar(@NativeError[0]));
+  end else Reason:='ABI garde integre incompatible';
+  {$ELSE}
   Name:=ExtractFilePath(ExpandFileName(ParamStr(0)))+'libmeshkvm_session.so';
   Lib:=LoadLibrary(Name);
   if Lib<>NilHandle then
@@ -47,9 +66,15 @@ begin
     if Result then Handle:=OpenGuard();
     Result:=Result and (Handle<>nil);
   end else Result:=False;
+  {$ENDIF}
   if not Result then
   begin
-    Reason:='Garde de session Linux indisponible. Compiler native/session/build.sh (libsystemd runtime requis).';
+    if Reason='' then
+      {$IFDEF KVM_STANDALONE}
+      Reason:='Garde de session integre indisponible: verifier le runtime libsystemd et la session utilisateur.';
+      {$ELSE}
+      Reason:='Garde de session Linux indisponible. Compiler native/session/build.sh (libsystemd runtime requis).';
+      {$ENDIF}
     if not Strict then begin Result:=True; Reason:=''; end;
   end;
   {$ENDIF}
@@ -110,6 +135,7 @@ begin
   if (Handle<>nil) and Assigned(GuardClose) then GuardClose(Handle);
   Handle:=nil;
   if Lib<>NilHandle then UnloadLibrary(Lib); Lib:=NilHandle;
+  GuardPoll:=nil; GuardClose:=nil;
 end;
 initialization InitCriticalSection(Lock);
 finalization CloseSessionGuard; DoneCriticalSection(Lock);

@@ -1,5 +1,6 @@
 unit kvm_wayland;
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 interface
 uses kvm_frame;
 function OpenWayland(Control: Boolean; FPS: Integer; out Reason: string): Boolean;
@@ -12,7 +13,7 @@ procedure WaylandKey(Pressed: Boolean; VKey: Word);
 procedure WaylandText(CodePoint: Cardinal);
 procedure WaylandWheel(Notches: SmallInt);
 implementation
-uses SysUtils, Dynlibs, ctypes, kvm_keysym;
+uses {$IFDEF KVM_STATIC_PORTAL}kvm_portal_static,{$ENDIF} SysUtils, Dynlibs, ctypes, kvm_keysym;
 var
   Lib: TLibHandle = NilHandle;
   Handle: Pointer = nil;
@@ -33,6 +34,19 @@ var Err: array[0..511] of AnsiChar;
 begin
   Reason := ''; Result := False;
   if Handle <> nil then Exit(True);
+  {$IFDEF KVM_STANDALONE}
+    {$IFDEF KVM_STATIC_PORTAL}
+    Abi:=@KvmPortalAbi;
+    if Abi()<>1 then begin Reason:='ABI portail integre incompatible'; Exit; end;
+    NativeOpen:=@KvmPortalOpen; NativeClose:=@KvmPortalClose;
+    NativeRead:=@KvmPortalRead; NativeAlive:=@KvmPortalAlive;
+    NativeActive:=@KvmPortalActive; NativeMouse:=@KvmPortalMouse;
+    NativeKey:=@KvmPortalKey; NativeWheel:=@KvmPortalWheel;
+    {$ELSE}
+    Reason:='Wayland non integre dans ce profil autonome. Recompiler avec --with-portal; le build de base cible X11.';
+    Exit;
+    {$ENDIF}
+  {$ELSE}
   if Lib = NilHandle then
     Lib := LoadLibrary(ExtractFilePath(ExpandFileName(ParamStr(0))) + 'libmeshkvm_portal.so');
   if Lib = NilHandle then
@@ -52,6 +66,7 @@ begin
      not Assigned(NativeAlive) or not Assigned(NativeActive) or not Assigned(NativeMouse) or
      not Assigned(NativeKey) or not Assigned(NativeWheel) then
   begin Reason := 'Pont portail incomplet'; Exit; end;
+  {$ENDIF}
   FillChar(Err, SizeOf(Err), 0);
   WriteLn('[portail] Autoriser localement le partage de l ecran',
     ' et, si demande, le clavier et la souris. Delai maximal : 120 s par dialogue.');

@@ -7,7 +7,7 @@ uses
   SysUtils, mormot.lib.openssl11, kvm_server, kvm_desktop, kvm_cli, kvm_monitors,
   {$IFDEF UNIX}BaseUnix, ctypes,{$ENDIF}
   {$IFDEF WINDOWS}Windows,{$ENDIF}
-  Classes;
+  kvm_build_info, Classes;
 
 var
   Server: TKvmServer;
@@ -51,6 +51,7 @@ begin
   if Options.ListMonitors then begin ListDesktopMonitors; Halt(0); end;
 
   WriteLn('MeshKVM v9 / Lazarus + mORMot2');
+  WriteLn('Build : ',KvmBuildDescription);
   WriteLn('Moteur de bureau : ', DesktopBackendName);
   if not DesktopBackendReady(Options.AllowControl, Reason) then
   begin

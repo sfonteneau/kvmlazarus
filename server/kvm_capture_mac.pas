@@ -1,5 +1,6 @@
 unit kvm_capture_mac;
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 interface
 uses kvm_frame;
 function MacSessionState(out Identity: string): Integer;
@@ -9,7 +10,7 @@ procedure CloseCapture;
 procedure SetMacCaptureFPS(FPS: Integer);
 function MacCaptureAvailable: Boolean;
 implementation
-uses SysUtils, ctypes, Dynlibs, kvm_quartz_api, kvm_monitors;
+uses {$IFDEF KVM_STANDALONE}kvm_sck_static,{$ENDIF} SysUtils, ctypes, Dynlibs, kvm_quartz_api, kvm_monitors;
 var
   Lib: TLibHandle = NilHandle;
   Handle: Pointer = nil;
@@ -44,6 +45,11 @@ begin
     Reason := 'Autoriser Enregistrement de l ecran pour MeshKVMServer puis relancer.';
     Exit;
   end;
+  {$IFDEF KVM_STANDALONE}
+  OpenStream:=@KvmSckOpen; ReadStream:=@KvmSckRead; CloseStream:=@KvmSckClose;
+  Available:=@KvmSckAvailable; ProbeSession:=@KvmSckSession;
+  Result:=True;
+  {$ELSE}
   if Lib = NilHandle then
   begin
     // Load only beside the executable, never from the current directory.
@@ -59,6 +65,7 @@ begin
   end;
   Result := (Lib <> NilHandle) and Assigned(OpenStream) and Assigned(ReadStream) and Assigned(CloseStream) and Assigned(Available) and Assigned(ProbeSession);
   if not Result then Reason := 'Compiler native/macos/build.sh (macOS 12.3+, Xcode), puis placer libmeshkvm_sck.dylib a cote du serveur.';
+  {$ENDIF}
 end;
 procedure CloseCapture;
 begin

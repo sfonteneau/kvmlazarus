@@ -1,10 +1,10 @@
 unit kvm_turbojpeg;
 
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 
-// TurboJPEG 2.x/3.x classic API. Dynamic loading prevents a binary from
-// depending on a platform-specific library name at link time. The library
-// is REQUIRED to run this encoder (there is no hidden slow JPEG fallback).
+// TurboJPEG classic API. Standalone uses a real static archive; the Default
+// profile keeps dynamic loading. No extraction and no slow encoder fallback.
 
 interface
 
@@ -37,7 +37,7 @@ type
 
 implementation
 
-uses kvm_wire;
+uses {$IFDEF KVM_STANDALONE}kvm_turbojpeg_static,{$ENDIF} kvm_wire;
 
 const
   TJPF_RGB = 0;
@@ -46,6 +46,7 @@ const
   TJFLAG_NOREALLOC = 1024;
 
 constructor TTurboJpegEncoder.Create;
+{$IFNDEF KVM_STANDALONE}
 const
   {$IFDEF WINDOWS}
   Candidates: array[0..1] of string = ('turbojpeg.dll', 'libturbojpeg.dll');
@@ -62,10 +63,18 @@ const
   {$ENDIF}
 var
   I: Integer;
+{$ENDIF}
 begin
   inherited Create;
   FLibrary := NilHandle;
   FHandle := nil;
+  {$IFDEF KVM_STANDALONE}
+  FInit := @KvmTjInitCompress;
+  FDestroy := @KvmTjDestroy;
+  FBufferSize := @KvmTjBufSize;
+  Pointer(FCompress) := @KvmTjCompress;
+  FGetError := @KvmTjError;
+  {$ELSE}
   for I := Low(Candidates) to High(Candidates) do
   begin
     FLibrary := LoadLibrary(Candidates[I]);
@@ -81,6 +90,7 @@ begin
   Pointer(FBufferSize) := GetProcedureAddress(FLibrary, 'tjBufSize');
   Pointer(FCompress) := GetProcedureAddress(FLibrary, 'tjCompress2');
   Pointer(FGetError) := GetProcedureAddress(FLibrary, 'tjGetErrorStr2');
+  {$ENDIF}
   if (not Assigned(FInit)) or (not Assigned(FDestroy)) or
      (not Assigned(FBufferSize)) or (not Assigned(FCompress)) then
     raise ETurboJpeg.Create('API TurboJPEG incomplete (tjCompress2 requis).');

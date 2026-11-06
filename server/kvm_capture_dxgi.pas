@@ -1,12 +1,13 @@
 unit kvm_capture_dxgi;
 {$mode objfpc}{$H+}
+{$I ../shared/kvm_build.inc}
 interface
 uses kvm_frame;
 function CheckDxgi(out Reason: string): Boolean;
 function CaptureDxgi(MaxW, MaxH: Integer; var Frame: TRgbFrame): Boolean;
 procedure CloseDxgi;
 implementation
-uses SysUtils, Dynlibs, ctypes, kvm_monitors;
+uses {$IFDEF KVM_STATIC_DXGI}kvm_dxgi_static,{$ENDIF} SysUtils, Dynlibs, ctypes, kvm_monitors;
 var
   Lib: TLibHandle = NilHandle;
   Handle: Pointer = nil;
@@ -21,6 +22,18 @@ function CheckDxgi(out Reason: string): Boolean;
 var Abi: function: CInt; cdecl;
 begin
   Reason := ''; Result := False;
+  {$IFDEF KVM_STANDALONE}
+    {$IFDEF KVM_STATIC_DXGI}
+    Abi:=@KvmDxgiAbi;
+    OpenNative:=@KvmDxgiOpen; ReadNative:=@KvmDxgiRead; CloseNative:=@KvmDxgiClose;
+    Result:=Abi()=1;
+    if not Result then Reason:='ABI DXGI integre incompatible';
+    Exit;
+    {$ELSE}
+    Reason:='DXGI non integre dans ce profil autonome. Recompiler avec --with-dxgi ou utiliser --backend gdi.';
+    Exit;
+    {$ENDIF}
+  {$ELSE}
   if Lib = NilHandle then
     Lib := LoadLibrary(ExtractFilePath(ExpandFileName(ParamStr(0))) + 'meshkvm_dxgi.dll');
   if Lib = NilHandle then begin Reason := 'meshkvm_dxgi.dll absent: compiler native/windows/build.cmd'; Exit; end;
@@ -32,6 +45,7 @@ begin
   Pointer(CloseNative) := GetProcedureAddress(Lib, 'kvm_dxgi_close');
   Result := Assigned(OpenNative) and Assigned(ReadNative) and Assigned(CloseNative);
   if not Result then Reason := 'Exports DXGI manquants';
+  {$ENDIF}
 end;
 procedure CloseDxgi;
 begin
