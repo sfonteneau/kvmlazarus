@@ -176,3 +176,7 @@ Ni service, ni installateur n'est ajoute. Les secrets, certificats et cles TLS
 restent externes au programme. Conserver les notices des composants tiers lies
 lors de ta distribution. Les journaux precedents et le README historique dans
 `docs/` ne constituent pas une validation de ce nouveau mode.
+
+**Liaison statique Windows MinGW/FPC :** voir `docs/LIEN_STATIQUE_WINDOWS_FPC_MINGW.md` pour le conflit `_tls_used`, les imports WinAPI et le groupe de bibliotheques genere.
+
+Correctif liaison Windows : `docs/CORRECTIF_WINCRT_ARCHIVE.md` (suppression du script GNU ld GROUP, vraie archive ar CRT).

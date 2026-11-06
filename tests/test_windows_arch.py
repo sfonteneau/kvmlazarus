@@ -243,12 +243,15 @@ class Targets(unittest.TestCase):
             fpc=dummy_tool(root/'FPC'/'fpc.exe')
             laz=dummy_tool(root/'Lazarus'/'lazbuild.exe')
             jpeg=root/'libturbojpeg.a'; jpeg.write_bytes(b'!<arch>\n')
-            for lib in ['mingw32','mingwex','gcc','msvcrt','kernel32']:
+            for lib in ['mingw32','mingwex','gcc','gcc_eh','msvcrt','kernel32']:
                 (root/('lib'+lib+'.a')).write_bytes(b'!<arch>\n')
             for arch,cpu,system in [('x86','i386','win32'),('x64','x86_64','win64')]:
                 calls=[]
+                runtime_probes=[]
                 def fake_run(argv,**kwargs):
                     args=[str(x) for x in argv]; calls.append(args)
+                    if kwargs.get('clean_windows_runtime'):
+                        runtime_probes.append((args, kwargs.get('cwd')))
                     if '-dumpmachine' in args:
                         return ('i686' if cpu=='i386' else 'x86_64')+'-w64-mingw32'
                     if '--verbose' in args and args[0].endswith('ld.exe'):
@@ -271,12 +274,22 @@ class Targets(unittest.TestCase):
                         project=Path(args[-1]); tree=ET.parse(project)
                         exe_fixture((project.parent/tree.find('.//Target/Filename').get('Value')).resolve(),cpu)
                     return ''
-                with patch.object(b,'ROOT',root), patch.object(b.platform,'system',return_value='Windows'), \
+                def fake_merge(ar, path, archives):
+                    path.parent.mkdir(parents=True,exist_ok=True)
+                    path.write_bytes(b'!<arch>\n' + b''.join(p.name.encode('ascii') for p in archives))
+                    self.assertFalse(any(p.name=='libkvm_mingw32.a' for p in archives))
+                with patch.object(b,'merge_crt_archives',side_effect=fake_merge), \
+                     patch.object(b,'ROOT',root), patch.object(b.platform,'system',return_value='Windows'), \
                      patch.object(b.platform,'machine',return_value='AMD64'), patch.object(b,'run',side_effect=fake_run), \
                      patch.dict(os.environ, {'CC':'/unrelated/Strawberry/gcc.exe'}):
                     result=b.main(['--arch',arch,'--toolchain-bin',str(sdk),'--fpc',fpc,'--lazbuild',laz,
                                    '--turbojpeg-archive',str(jpeg)])
                 self.assertEqual(result,0)
+                # The C and Pascal probes run without the developer MinGW PATH.
+                self.assertEqual(len(runtime_probes),2)
+                self.assertTrue(all(cwd is not None for _,cwd in runtime_probes))
+                names=[a for cmd in calls for a in cmd if a.startswith('-print-file-name=')]
+                self.assertEqual('-print-file-name=libgcc_eh.a' in names, cpu=='i386')
                 pascal=[c for c in calls if c[0]==fpc and '-B' in c]
                 self.assertEqual(len(pascal),1)
                 self.assertIn('-P'+cpu,pascal[0]); self.assertIn('-T'+system,pascal[0])
@@ -286,6 +299,17 @@ class Targets(unittest.TestCase):
                 for cmd in laz_commands:
                     self.assertIn('--cpu='+cpu,cmd); self.assertIn('--os='+system,cmd)
                 self.assertTrue((root/'dist'/ (cpu+'-'+system)/'MeshKVMServer.exe').is_file())
+                staging=root/'native/static'/(cpu+'-'+system)
+                links=(staging/'kvm_turbojpeg_link.inc').read_text()
+                self.assertEqual(links.strip(), '{$LINKLIB kvm_wincrt}')
+                archive=(staging/'libkvm_wincrt.a').read_bytes()
+                self.assertTrue(archive.startswith(b'!<arch>\n'))
+                self.assertNotIn(b'GROUP (',archive)
+                for expected in ['libkvm_mingwex.a','libkvm_gcc.a',
+                                 'libkvm_msvcrt.a','libkvm_kernel32.a']:
+                    self.assertIn(expected.encode('ascii'),archive)
+                self.assertEqual(b'libkvm_gcc_eh.a' in archive, cpu=='i386')
+                self.assertNotIn(b'libkvm_mingw32.a',archive)
             self.assertTrue((root/'server/MeshKVMServer_Standalone_x86.lpi').is_file())
             self.assertTrue((root/'server/MeshKVMServer_Standalone_x64.lpi').is_file())
 

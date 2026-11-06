@@ -29,9 +29,30 @@ class BuildHelpers(unittest.TestCase):
         for flags in [['-Wl,--bad-option'],['-F/unknown'],['/path/lib.a'],['-lbad;name']]:
             with self.assertRaises(b.BuildError): b.system_links(flags)
     def test_audit_windows(self):
-        self.assertEqual(a.violations('PE',['USER32.dll','msvcrt.dll','api-ms-win-core-libraryloader-l1-1-0.dll']),[])
-        for name in ['meshkvm_codec.dll','turbojpeg.dll','libstdc++-6.dll','random_vendor.dll']:
+        self.assertEqual(a.violations('PE',['USER32.dll','msvcrt.dll','MPR.dll','msi.dll', 'KERNEL32.dll',
+            'version.dll', 'ole32.dll', 'api-ms-win-core-libraryloader-l1-1-0.dll']),[])
+        for name in ['meshkvm_codec.dll','turbojpeg.dll','libstdc++-6.dll',
+                     'libgcc_s_dw2-1.dll','libgcc_s_seh-1.dll','libwinpthread-1.dll',
+                     'random_vendor.dll']:
             self.assertTrue(a.violations('PE',[name]))
+    def test_audit_windows_actual_fpc_imports(self):
+        # Extrait des dependances du test_standalone_link.exe compile dans la VM Windows.
+        dlls=['KERNEL32.dll','msvcrt.dll','kernel32.dll','user32.dll',
+              'ole32.dll','version.dll','mpr.dll']
+        self.assertEqual(a.violations('PE',dlls),[])
+        self.assertTrue(a.violations('PE',dlls+['libgcc_s_dw2-1.dll']))
+        self.assertTrue(a.violations('PE',dlls+['turbojpeg.dll']))
+    def test_audit_windows_actual_meshkvm_server_imports(self):
+        # Imports exacts releves sur MeshKVMServer.exe x86 par objdump -p.
+        dlls=['oleaut32.dll','kernel32.dll','user32.dll','ole32.dll',
+              'advapi32.dll','gdi32.dll','version.dll','mpr.dll',
+              'wininet.dll','KERNEL32.dll','msvcrt.dll','wtsapi32.dll',
+              'crypt32.dll','netapi32.dll','secur32.dll','msi.dll','ws2_32.dll']
+        self.assertEqual(a.violations('PE',dlls),[])
+        # Conserver le refus des dependances non-systeme.
+        for private in ('libgcc_s_dw2-1.dll','libwinpthread-1.dll',
+                        'turbojpeg.dll','libstdc++-6.dll','kvm_private.dll'):
+            self.assertTrue(a.violations('PE',dlls+[private]),private)
     def test_audit_unix(self):
         self.assertEqual(a.violations('ELF',['libc.so.6','libX11.so.6','libavcodec.so.61']),[])
         for name in ['libmeshkvm_session.so','libturbojpeg.so.0','libkvm_codec.so']:

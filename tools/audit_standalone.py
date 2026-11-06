@@ -21,7 +21,7 @@ WIN_SYSTEM = {'kernel32.dll','kernelbase.dll','user32.dll','gdi32.dll','gdi32ful
  'comdlg32.dll','comctl32.dll','uxtheme.dll','dwmapi.dll','imm32.dll','version.dll',
  'ws2_32.dll','wsock32.dll','mswsock.dll','iphlpapi.dll','dnsapi.dll','netapi32.dll',
  'crypt32.dll','bcrypt.dll','ncrypt.dll','secur32.dll','security.dll','wintrust.dll',
- 'winmm.dll','msimg32.dll','msvcrt.dll','ucrtbase.dll','ntdll.dll','psapi.dll',
+ 'winmm.dll','msimg32.dll','mpr.dll','msi.dll','msvcrt.dll','ucrtbase.dll','ntdll.dll','psapi.dll',
  'wtsapi32.dll','userenv.dll','d3d11.dll','dxgi.dll','dxguid.dll','opengl32.dll',
  'glu32.dll','setupapi.dll','cfgmgr32.dll','powrprof.dll','dbghelp.dll','rpcrt4.dll',
  'normaliz.dll','wininet.dll','winhttp.dll'}
@@ -64,21 +64,25 @@ def main() -> int:
     p.add_argument('binary',type=Path)
     p.add_argument('--report',type=Path)
     p.add_argument('--objdump', default='objdump', help='Explicit MinGW/LLVM objdump path for PE files')
+    p.add_argument('--verbose', action='store_true', help='Afficher aussi la sortie complete de objdump/readelf/otool')
     args=p.parse_args()
     kind,deps,data=inspect(args.binary,args.objdump)
     bad=violations(kind,deps)
     lines=['Executable: '+str(args.binary),'Format: '+kind,
-      'Dependances directes:']+['  '+d for d in deps]
+      'Dependances directes:']+['  '+d for d in dict.fromkeys(deps)]
     lines+=['RESULTAT: '+('ECHEC: '+', '.join(bad) if bad else 'aucune dependance directe privee MeshKVM/TurboJPEG detectee'),
       'Limite: ne couvre ni dlopen/LoadLibrary, ni plugins du bureau/GPU, ni toutes les dependances transitives.',
       'Les profils autonomes compilent les chargeurs de modules MeshKVM hors du binaire.',
-      'Linux: verifier aussi les paquets systeme sur la machine cible. macOS: les dylibs non Apple restent externes.',
-      '',data]
-    text='\n'.join(lines)
-    print(text)
+      'Linux: verifier aussi les paquets systeme sur la machine cible. macOS: les dylibs non Apple restent externes.']
+    summary='\n'.join(lines)
+    print(summary)
+    # Un objdump -p complet peut depasser plusieurs centaines de Ko :
+    # ne pas noyer le terminal, garder la trace brute seulement sur demande.
+    if args.verbose:
+        print('\n--- inspection native detaillee ---\n'+data)
     if args.report:
         args.report.parent.mkdir(parents=True,exist_ok=True)
-        args.report.write_text(text,encoding='utf-8')
+        args.report.write_text(summary+'\n\n--- inspection native detaillee ---\n'+data,encoding='utf-8')
     return int(bool(bad))
 
 if __name__=='__main__':

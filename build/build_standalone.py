@@ -26,17 +26,28 @@ ROOT = Path(__file__).resolve().parents[1]
 class BuildError(RuntimeError):
     pass
 
-def run(argv: list[str | Path], *, capture: bool = False, cwd: Path | None = None) -> str:
+def run(argv: list[str | Path], *, capture: bool = False, cwd: Path | None = None,
+        clean_windows_runtime: bool = False) -> str:
     args = [str(a) for a in argv]
     display = subprocess.list2cmdline(args) if os.name == 'nt' else shlex.join(args)
     print('+ ' + display, flush=True)
     env = os.environ.copy()
     env['LC_ALL'] = 'C'
+    if clean_windows_runtime:
+        # The probe must not accidentally find MinGW DLLs from the developer's
+        # PATH.  Otherwise it passes locally but fails after being copied to a
+        # machine with only Windows system DLLs installed.
+        if os.name != 'nt':
+            raise BuildError('The isolated Windows runtime probe requires Windows')
+        windows = env.get('SystemRoot') or env.get('WINDIR')
+        if not windows:
+            raise BuildError('SystemRoot/WINDIR missing: isolated Windows probe unavailable')
+        env['PATH'] = os.pathsep.join([str(Path(windows) / 'System32'), windows])
     p = subprocess.run(args, cwd=cwd or ROOT, text=True, errors='replace', env=env,
                        stdout=subprocess.PIPE if capture else None,
                        stderr=subprocess.STDOUT if capture else None)
     if p.returncode:
-        raise BuildError(f'Command failed ({p.returncode}): {shlex.join(args)}\n{p.stdout or ""}')
+        raise BuildError(f'Command failed ({p.returncode}): {display}\n{p.stdout or ""}')
     return (p.stdout or '').strip()
 
 def tool(name: str) -> str:
@@ -349,6 +360,60 @@ def stage_runtime(cc: str, stage: Path, library: str, output_name: str,
     shutil.copy2(path, destination)
     return output_name
 
+def merge_crt_archives(ar: str, path: Path, archives: list[Path]) -> None:
+    """Merge MinGW support/import libraries into a REAL GNU ar archive.
+
+    FPC's ld invocation includes its generated linkXXXX.res linker script. On
+    some native Windows binutils versions, a separate GROUP linker script
+    masquerading as libfoo.a triggers the duplicate-script detection bug.
+    An ar archive has no scripts and its symbol index handles intra-archive
+    references in a single search, including mingwex <-> libgcc <-> msvcrt.
+
+    Import libraries for msvcrt and kernel32 remain imports of system DLLs.
+    IMPORTANT: never merge libmingw32.a: it defines _tls_used already owned
+    by the FPC RTL (sysinitpas.o).
+    """
+    if not archives:
+        raise BuildError('Aucune archive CRT a regrouper')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.unlink(missing_ok=True)  # discard stale text GROUP() from prior builds
+    entries = []
+    for archive in archives:
+        if archive.parent.resolve() != path.parent.resolve():
+            raise BuildError('Archive CRT hors du dossier de staging: ' + str(archive))
+        if not archive.is_file():
+            raise BuildError('Archive ar statique manquante: ' + str(archive))
+        with archive.open('rb') as fp:
+            magic = fp.read(8)
+        if magic != b'!<arch>\n':
+            raise BuildError('Archive ar statique invalide: ' + str(archive))
+        if not re.fullmatch(r'lib[A-Za-z0-9_+-]+\.a', archive.name):
+            raise BuildError('Nom de bibliotheque non pris en charge: ' + archive.name)
+        if archive.name in ('libmingw32.a', 'libkvm_mingw32.a'):
+            raise BuildError('Le startup MinGW provoquerait un conflit TLS avec FPC')
+        entries.append(archive.name)
+    if path.name != 'libkvm_wincrt.a':
+        raise BuildError('Nom du groupe CRT inattendu')
+    # Use paths relative to cwd: Windows paths may contain spaces or accents.
+    # MRI input is sent on stdin, not interpreted by cmd.exe or bash.
+    commands = 'CREATE ' + path.name + '\n' + ''.join('ADDLIB ' + name + '\n' for name in entries) + 'SAVE\nEND\n'
+    process = subprocess.run([str(ar), '-M'], input=commands, cwd=path.parent,
+                             text=True, errors='replace', capture_output=True)
+    if process.returncode != 0 or not path.is_file():
+        raise BuildError('Echec de fusion des archives MinGW par GNU ar -M: ' +
+                         (process.stderr or process.stdout or str(process.returncode)))
+    with path.open('rb') as fp:
+        magic = fp.read(8)
+    if magic != b'!<arch>\n':
+        raise BuildError('Le fichier CRT fusionne nest pas une archive ar binaire')
+    # Force a current symbol index, checked again when compiling the real FPC
+    # test_standalone_link.exe (not just a GCC native probe).
+    run([ar, 's', path])
+    members = run([ar, 't', path], capture=True)
+    if not members.strip():
+        raise BuildError('Archive CRT fusionnee vide')
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--arch', choices=['native','x86','x64'], default='native',
@@ -475,22 +540,27 @@ def main(argv: list[str] | None = None) -> int:
     destination = stage / 'libkvm_turbojpeg.a'
     if jpeg.resolve() != destination.resolve():
         shutil.copy2(jpeg,destination)
-    turbo_links = ['{$LINKLIB c}', '{$LINKLIB m}'] if not is_windows(os_name) else ['{$LINKLIB msvcrt}']
+    turbo_links = ['{$LINKLIB c}', '{$LINKLIB m}'] if not is_windows(os_name) else []
     if is_windows(os_name):
-        # FPC's Pascal-only runtime does not supply the compiler's native C
-        # helpers. Stage real static archives, never *.dll.a import archives.
-        runtime_links=[]
-        # Search the selected MinGW SDK's system import archives, not an
-        # unrelated 32/64-bit directory from the IDE configuration.
-        for lib in ('msvcrt', 'kernel32'):
-            lib_path = Path(run([cc, '-print-file-name=lib' + lib + '.a'], capture=True))
-            if not lib_path.is_file():
-                raise BuildError('Bibliotheque systeme MinGW introuvable: ' + str(lib_path))
-            search.append(str(lib_path.resolve().parent))
-        for lib in ['mingw32','mingwex','gcc']:
-            name = stage_runtime(cc,stage,lib,'kvm_' + lib)
-            runtime_links.append('{$LINKLIB ' + name + '}')
-        turbo_links=runtime_links+turbo_links
+        # Discard a stale archive left by earlier versions of this builder.
+        # Never link the MinGW executable CRT startup into the FPC program.
+        (stage/'libkvm_mingw32.a').unlink(missing_ok=True)
+        # The FPC Win32 RTL supplies the entry point and TLS slot (_tls_used).
+        # Linking all of libmingw32.a pulls tlssup.o and conflicts with FPC.
+        # TurboJPEG may still need mingwex, libgcc, C runtime and Win32 imports.
+        # mingwex/msvcrt/libgcc refer to one another (notably __divdi3 in x86).
+        # A genuine combined ar archive resolves the circular references without
+        # introducing another linker script into the FPC linkXXXX.res.
+        crt_archives: list[Path] = []
+        for lib in ('mingwex', 'gcc', *(['gcc_eh'] if cpu == 'i386' else []),
+                    'msvcrt', 'kernel32'):
+            # Real .a archives, NOT GNU ld scripts: the FPC linkXXXX.res is
+            # itself a script and Windows binutils may misdetect duplicates.
+            name = stage_runtime(cc, stage, lib, 'kvm_' + lib)
+            crt_archives.append(stage/('lib' + name + '.a'))
+        merge_crt_archives(ar, stage/'libkvm_wincrt.a', crt_archives)
+        turbo_links = ['{$LINKLIB kvm_wincrt}']
+        # Never add libmingw32.a, and never request -static globally.
     write(stage/'kvm_turbojpeg_link.inc','\n'.join(turbo_links)+'\n')
     # A real native executable catches wrong CPU/CRT and missing static
     # dependencies before the Pascal build. It runs from a clean directory.
@@ -504,7 +574,8 @@ def main(argv: list[str] | None = None) -> int:
         clean_dir=Path(clean)
         isolated=clean_dir/probe.name
         shutil.copy2(probe,isolated)
-        run([isolated],cwd=clean_dir)
+        run([isolated], cwd=clean_dir,
+            clean_windows_runtime=is_windows(os_name))
     if args.only != 'client':
         if os_name == 'linux':
             native_archive(cc,ar,stage/'libkvm_session.a',ROOT/'native/session/kvm_session_linux.c',cflags)
@@ -520,13 +591,13 @@ def main(argv: list[str] | None = None) -> int:
             native_archive(cxx,ar,stage/'libkvm_dxgi.a',ROOT/'native/windows/kvm_dxgi.cpp',
                            ['-std=c++17','-O2','-Wall','-Wextra'])
             assert_archive(stage/'libkvm_dxgi.a',nm,['kvm_dxgi_open','kvm_dxgi_read'])
-            links=[]; runtime_archives=[]
-            for lib in ['stdc++','gcc_eh','gcc','mingwex','mingw32','winpthread']:
-                name=stage_runtime(cxx,stage,lib,'kvm_' + re.sub('[^a-zA-Z0-9_]','_',lib),optional=lib=='winpthread')
-                if name:
-                    links.append('{$LINKLIB ' + name + '}')
-                    runtime_archives.append(stage/('lib'+name+'.a'))
-            links += ['{$LINKLIB ' + lib + '}' for lib in ['d3d11','dxgi','dxguid','uuid','user32','gdi32','kernel32','msvcrt','advapi32']]
+            # Do not reintroduce libmingw32.a through the optional DXGI path.
+            # The already-staged wincrt GROUP resolves GCC/mingwex/msvcrt and
+            # the FPC RTL remains the sole owner of the process startup/TLS.
+            name=stage_runtime(cxx,stage,'stdc++','kvm_stdcpp')
+            runtime_archives=[stage/('lib'+name+'.a')]
+            links=['{$LINKLIB '+name+'}', '{$LINKLIB kvm_wincrt}']
+            links += ['{$LINKLIB ' + lib + '}' for lib in ['d3d11','dxgi','dxguid','uuid','user32','gdi32','kernel32','advapi32']]
             write(stage/'kvm_dxgi_link.inc','\n'.join(links)+'\n')
             # Verify the SAME archive/runtime set with a real C++ executable
             # before leaving the harder mixed Pascal/C++ link to lazbuild.
@@ -560,7 +631,9 @@ def main(argv: list[str] | None = None) -> int:
     output.mkdir(parents=True,exist_ok=True)
     manifest={'target':target,'requested_arch':args.arch,'fpc':fpc,'cc':cc,
               'ar':ar,'nm':nm,'objdump':objdump,'features':defines,'base':'TurboJPEG static; system libraries dynamic',
-              'source_turbojpeg_archive':str(jpeg),'archives':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.glob('*.a')},
+              'source_turbojpeg_archive':str(jpeg),
+              'archives':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
+                          for p in stage.glob('*.a')},
               'complete_applications_built':False}
     write(stage/'build-manifest.json',json.dumps(manifest,indent=2)+'\n')
     if args.prepare_only:
@@ -580,11 +653,20 @@ def main(argv: list[str] | None = None) -> int:
         opts += ['-Fl' + path for path in search]
         run([fpc,*opts,ROOT/'tests/test_standalone_link.lpr'])
         audit_binary(executable, cpu, os_name, objdump)
-        run([executable])
+        # Run the linked Pascal/native smoke test without MinGW on PATH too.
+        # This detects DW2 runtime LoadLibrary dependencies that a PE import
+        # table inspection cannot see.
+        if is_windows(os_name):
+            with tempfile.TemporaryDirectory(prefix='meshkvm-pascal-link-') as clean:
+                isolated = Path(clean) / executable.name
+                shutil.copy2(executable, isolated)
+                run([isolated], cwd=Path(clean), clean_windows_runtime=True)
+        else:
+            run([executable])
     if args.mormot_dir:
         package=args.mormot_dir.resolve()/'packages/lazarus/mormot2.lpk'
         if not package.is_file(): raise BuildError('Paquet mORMot2 introuvable: '+str(package))
-        run([laz,'--add-package-link='+str(package)])
+        run([laz,'--add-package-link '+str(package)])
     # Force rebuilding after feature changes; no stale standalone .ppu reuse.
     for role,app,project in zip(['server','client'],['MeshKVMServer','MeshKVMClient'],projects):
         if args.only not in ['both',role]: continue
