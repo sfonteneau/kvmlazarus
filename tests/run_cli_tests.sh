@@ -66,7 +66,14 @@ printf '%s\n' "$OUTPUT" | grep -q '^MAXWIDTH=3840$'
 printf '%s\n' "$OUTPUT" | grep -q '^MAXHEIGHT=2160$'
 printf '%s\n' "$OUTPUT" | grep -q '^FPS=30$'
 printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=0$'
-for BAD in '--fps 31' '--monitor -1' '--monitor 65' '--max-width 63' '--max-height 8193' '--max-width 8192 --max-height 8192'; do
+OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --fps 0 --quality 100 --no-adaptive)
+printf '%s\n' "$OUTPUT" | grep -q '^FPS=0$'
+printf '%s\n' "$OUTPUT" | grep -q '^QUALITY=100$'
+printf '%s\n' "$OUTPUT" | grep -q '^ADAPTIVE=0$'
+OUTPUT=$(env MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" --fps 144 --quality 95)
+printf '%s\n' "$OUTPUT" | grep -q '^FPS=144$'
+printf '%s\n' "$OUTPUT" | grep -q '^QUALITY=95$'
+for BAD in '--fps 1001' '--fps -1' '--quality 0' '--quality 101' '--monitor -1' '--monitor 65' '--max-width 63' '--max-height 8193' '--max-width 8192 --max-height 8192'; do
   # Intentional word splitting: each BAD fixture contains separate arguments.
   if env -u MESH_KVM_VIEW_TOKEN MESH_KVM_TOKEN="$TOKEN" "$TMP/test_server_options" $BAD >/dev/null 2>&1; then
     echo "Invalid options unexpectedly accepted: $BAD" >&2; exit 1

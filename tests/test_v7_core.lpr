@@ -47,6 +47,12 @@ begin
   Check((AdaptiveBudget(S)>=128*1024) and (AdaptiveBudget(S)<=3*1024*1024),'budget clamp');
   ProfileSettings(2,3840,2160,80,30,W,H,Q,FPS);
   Check((W=1920) and (H=1080) and (Q=35) and (FPS=3),'low profile settings');
+  ProfileSettings(0,3840,2160,100,0,W,H,Q,FPS);
+  Check((W=3840) and (H=2160) and (Q=100) and (FPS=0),'unpaced full profile');
+  ProfileSettings(1,3840,2160,100,0,W,H,Q,FPS);
+  Check((Q=55) and (FPS=30),'balanced profile has bounded FPS with unlimited base');
+  ProfileSettings(2,3840,2160,100,0,W,H,Q,FPS);
+  Check((Q=35) and (FPS=10),'low profile has bounded FPS with unlimited base');
 
   Check(AllocateFrame(A,4,2),'frame allocation');
   for I:=1 to Length(A.RGB) do A.RGB[I]:=AnsiChar(I);

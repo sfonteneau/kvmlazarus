@@ -36,8 +36,11 @@ uses Math, kvm_wire, kvm_extwire;
 constructor TKvmVideo.Create(const EncoderName,Device: string; FPS,Kbps: Integer);
 begin
   inherited Create; FEncoder:=TTurboJpegEncoder.Create;
-  FHardwareName:=EncoderName; FDevice:=Device; FFPS:=FPS; FBitrate:=Kbps;
+  FHardwareName:=EncoderName; FDevice:=Device; FBitrate:=Kbps;
   FUseH264:=EncoderName<>'turbojpeg';
+  // Native FFmpeg bridge currently accepts 1..60, unlike JPEG scheduling.
+  // FPS=0 means unpaced JPEG, not a valid H.264 time base.
+  if FPS<=0 then FFPS:=60 else FFPS:=Min(FPS,60);
 end;
 destructor TKvmVideo.Destroy;
 begin FH264.Free; FEncoder.Free; inherited Destroy; end;

@@ -71,6 +71,11 @@ begin
       (Jpeg[2] = #$d8) and (Jpeg[Length(Jpeg)-1] = #$ff) and
       (Jpeg[Length(Jpeg)] = #$d9), 'valid JPEG markers');
     Check(JpegIs444(Jpeg), 'JPEG SOF0 must specify 4:4:4 for all 3 components');
+    Check(Encoder.EncodeRect(Image, 0, 0, 256, 256, 100, Jpeg),
+      'TurboJPEG accepts quality=100');
+    Check(JpegIs444(Jpeg), 'quality=100 must remain 4:4:4');
+    Check(not Encoder.EncodeRect(Image, 0, 0, 256, 256, 101, Jpeg),
+      'quality=101 is invalid');
     Check(not Encoder.EncodeRect(Image, 0, 0, 513, 256, 70, Jpeg),
       'oversized rectangle rejected');
     Started := GetTickCount64;

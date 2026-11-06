@@ -80,8 +80,12 @@ begin
       WriteLn('Ecoute : wss://', BindAddress, '/kvm ; protocole meshkvm7')
     else
       WriteLn('Ecoute : ws://', BindAddress, '/kvm ; protocole meshkvm7');
-    WriteLn('Diffusion JPEG/H264 selon codec negocie ; ', Options.FPS,
-      ' images/s max ; qualite max ', Options.Quality);
+    if Options.FPS=0 then
+      WriteLn('Diffusion JPEG : cadence libre (capture/CPU/ACK) ; qualite JPEG ',
+        Options.Quality)
+    else
+      WriteLn('Diffusion JPEG/H264 selon codec negocie ; ', Options.FPS,
+        ' images/s demandees ; qualite JPEG ', Options.Quality);
     WriteLn('Resolution maximale du profil haut : ', Options.MaxWidth, 'x',
       Options.MaxHeight, ' ; TurboJPEG : 4:4:4 (DCT standard)');
     if Options.Adaptive then

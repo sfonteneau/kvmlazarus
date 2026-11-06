@@ -29,9 +29,11 @@ begin
   W := BaseW; H := BaseH; Quality := BaseQuality; FPS := BaseFps;
   case Profile of
     1: begin W := Max(1, BaseW * 3 div 4); H := Max(1, BaseH * 3 div 4);
-         Quality := Min(BaseQuality, 55); FPS := Max(1, BaseFps div 2); end;
+         Quality := Min(BaseQuality, 55);
+         if BaseFps=0 then FPS:=30 else FPS:=Max(1, BaseFps div 2); end;
     2: begin W := Max(1, BaseW div 2); H := Max(1, BaseH div 2);
-         Quality := Min(BaseQuality, 35); FPS := Min(BaseFps, 3); end;
+         Quality := Min(BaseQuality, 35);
+         if BaseFps=0 then FPS:=10 else FPS:=Min(BaseFps, 3); end;
   end;
 end;
 function ObserveAck(var S: TKvmAdaptiveState; NowTick, ElapsedMs: QWord;

@@ -152,7 +152,7 @@ begin
       try
         PollSessionGuard; FOwner.FMetrics.Flush; FOwner.ExpireIdleClients;
         FOwner.CaptureDemand(Wanted,Started,CaptureW,CaptureH,CaptureRate);
-        if CaptureRate>0 then ConfigureCaptureFPS(CaptureRate);
+        if CaptureW>0 then ConfigureCaptureFPS(CaptureRate);
         if (CaptureW=0) and CaptureOpen then
         begin CloseDesktopCapture; CaptureOpen:=False; end;
         FOwner.PublishDesktopState;
@@ -229,8 +229,15 @@ begin
       WaitMs:=50;
       for P:=0 to High(Wanted) do if Wanted[P] then
         WaitMs:=Min(WaitMs,CaptureWaitMs(NowTick,NextTick[P],50));
-      if WaitMs=0 then WaitMs:=1;
-      FOwner.FWakeCapture.WaitFor(WaitMs);
+      if WaitMs=0 then
+      begin
+        // No implicit Windows timer-quantum FPS ceiling in --fps 0 mode.
+        // Sleep(0) only yields to another runnable thread, without adding
+        // a minimum 1-15ms wait to every capture cycle.
+        if FOwner.FFps=0 then Sleep(0)
+        else FOwner.FWakeCapture.WaitFor(1);
+      end
+      else FOwner.FWakeCapture.WaitFor(WaitMs);
     end;
   finally
     CloseDesktopCapture;

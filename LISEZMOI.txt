@@ -1,0 +1,20 @@
+MeshKVM v9 P1/P2/P3 - profil FPS libre / JPEG qualite 100
+============================================================
+
+Correctif a EXTRAIRE DANS C:\tranquilit\kvmlazarus, en conservant
+shared/, server/, tests/ et docs/. Aucun fichier de mORMot2 n'est modifie.
+
+Options nouvelles apres RECOMPILATION du serveur:
+  --fps 0 --quality 100 --no-adaptive --max-width 3840 --max-height 2160
+
+--fps 0: cadence libre (limitee par capture/CPU/ACK/client/reseau).
+--fps 1..1000: cadence cible explicite.
+--quality 1..100: JPEG 4:4:4; 100 n'est pas sans perte.
+--no-adaptive: pas de reduction automatique de la qualite/resolution.
+
+La liaison statique x86/x64 et les binaires client ne sont pas changes.
+Voir docs\LAN_QUALITE_FPS_LIBRES.md pour la commande Windows detaillee,
+les limitations de Wayland/macOS/H264 et les precautions de securite.
+
+Tests effectues ici: 68 tests Python (suite existante et nouveaux controles).
+Tests FPC/Lazarus/Windows non executes dans cet environnement.

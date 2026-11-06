@@ -129,7 +129,7 @@ var
 begin
   Result := False;
   Jpeg := '';
-  if (FHandle = nil) or (Quality < 10) or (Quality > 90) or
+  if (FHandle = nil) or (Quality < 1) or (Quality > 100) or
      (X < 0) or (Y < 0) or (W < 1) or (H < 1) or
      (W > KVM_MAX_RECT_WIDTH) or (H > KVM_MAX_RECT_HEIGHT) or
      (X + W > Frame.Width) or (Y + H > Frame.Height) or

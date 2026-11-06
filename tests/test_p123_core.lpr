@@ -38,6 +38,10 @@ begin
   Check(CaptureIsDue(100,0),'Initial capture');
   Check(NextCaptureTick(100,130,20)=150,'Capture deadline includes elapsed work');
   Check(NextCaptureTick(100,180,20)=180,'No catch-up burst');
+  Check(NextCaptureTick(100,130,0)=130,'Unpaced captures have no deadline');
+  Check(NextCaptureTick(100,105,144)=107,'144 FPS has no 120 FPS clamp');
+  Check(NextCaptureTick(100,105,240)=105,'Late high-FPS captures do not catch up');
+  Check(NextCaptureTick(100,100,1000)=101,'1ms resolution at 1000 FPS');
   Check(CaptureWaitMs(130,150,50)=20,'Deadline wait');
   Check(CaptureWaitMs(160,150,50)=0,'Overdue wait');
   InitFlow(State);

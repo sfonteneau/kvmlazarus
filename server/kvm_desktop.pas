@@ -28,6 +28,14 @@ var
   Backend: string = 'auto';
   IsPortal, UseDxgi, RequireDxgi: Boolean;
   RequestedFPS: Integer = 3;
+// The native portal and SCK bridges currently accept only 1..30 FPS.
+// Keep unpaced Windows JPEG scheduling independent of these stream APIs.
+function NativeCaptureFPS(FPS: Integer): Integer;
+begin
+  if FPS<=0 then Exit(30);
+  if FPS>30 then Exit(30);
+  Result:=FPS;
+end;
 function ConfigureDesktop(const Options: TKvmServerOptions; out Reason: string): Boolean;
 begin
   Backend := Options.Backend; RequestedFPS := Options.FPS;
@@ -66,7 +74,7 @@ begin
   PrintMonitors;
 end;
 procedure ConfigureCaptureFPS(FPS: Integer);
-begin {$IFDEF DARWIN}SetMacCaptureFPS(FPS);{$ENDIF} end;
+begin {$IFDEF DARWIN}SetMacCaptureFPS(NativeCaptureFPS(FPS));{$ENDIF} end;
 procedure CloseDesktopCapture;
 begin
   {$IFDEF WINDOWS}CloseDxgi; kvm_capture_win.CloseCapture;{$ENDIF}
@@ -101,7 +109,7 @@ begin
   if not Result then Reason := 'Lancer dans une session Windows graphique interactive';
   {$ENDIF}
   {$IFDEF LINUX}
-  if IsPortal then Exit(OpenWayland(AllowControl,RequestedFPS,Reason));
+  if IsPortal then Exit(OpenWayland(AllowControl,NativeCaptureFPS(RequestedFPS),Reason));
   Result := kvm_capture_x11.CheckX11Display(Reason);
   if Result and AllowControl then Result := kvm_inject_x11.CheckX11Control(Reason);
   {$ENDIF}

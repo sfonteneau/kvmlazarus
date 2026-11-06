@@ -205,3 +205,11 @@ local et `--fix-mormot-msi` ont ete retires. `--mormot-dir` continue a
 selectionner et reconstruire le paquet mORMot2 utilise par Lazarus.
 L'audit final des imports reste actif en lecture seule.
 Voir `docs/INTEGRATION_MORMOT2_AMONT.md`.
+
+
+## Profil Windows LAN : JPEG qualite 100, FPS libres
+
+Le profil `--quality 100 --fps 0 --no-adaptive --max-width 3840
+--max-height 2160` evite les plafonds de 90/30 et la reduction de qualite
+adaptative, tout en conservant le controle de flux et les limites memoire.
+Voir `docs/LAN_QUALITE_FPS_LIBRES.md` pour les conditions et limites reelles.

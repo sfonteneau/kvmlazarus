@@ -144,8 +144,8 @@ function ServerUsage: string;
 begin
   Result :=
     'MeshKVMServer [--listen IP] [--port PORT] [--token SECRET]' + LineEnding +
-    '              [--view-token SECRET] [--fps 1..30]' + LineEnding +
-    '              [--quality 10..90] [--control]' + LineEnding +
+    '              [--view-token SECRET] [--fps 0|1..1000]' + LineEnding +
+    '              [--quality 1..100] [--control]' + LineEnding +
     '              [--tls-cert FILE] [--tls-key FILE]' + LineEnding +
     '              [--backend auto|x11|portal|gdi|dxgi|sck]' + LineEnding +
     '              [--monitor N] [--list-monitors]' + LineEnding +
@@ -155,6 +155,8 @@ begin
     '              [--bitrate-kbps 128..100000] [--gpu-device DEVICE]' + LineEnding +
     '              [--session-policy strict|backend] [--metrics-csv FILE]' + LineEnding +
     '              [--allow-insecure] (explicite pour ws distant, VPN requis)' + LineEnding +
+    '--fps 0 : cadence libre (limitee par la capture, le CPU et les ACK).' + LineEnding +
+    '--no-adaptive : evite la baisse automatique de qualite/resolution.' + LineEnding +
     'Par defaut : --listen 127.0.0.1 --port 7900 --fps 3 --quality 65' + LineEnding +
     'Token : --token SECRET ou MESH_KVM_TOKEN (16+ caracteres).' + LineEnding +
     '--control + --token : controle. --view-token / MESH_KVM_VIEW_TOKEN : vision.' + LineEnding +
@@ -320,9 +322,9 @@ begin
     else if (A = '--fps') or (Copy(A, 1, 6) = '--fps=') then
     begin
       if not ReadValue('--fps', I, V, ErrorText) then Exit;
-      if not IsUnsignedDecimal(V, N) or (N < 1) or (N > 30) then
+      if not IsUnsignedDecimal(V, N) or (N > 1000) then
       begin
-        ErrorText := '--fps doit etre entre 1 et 30';
+        ErrorText := '--fps attend 0 (libre) ou 1..1000';
         Exit;
       end;
       Options.FPS := N;
@@ -330,9 +332,9 @@ begin
     else if (A = '--quality') or (Copy(A, 1, 10) = '--quality=') then
     begin
       if not ReadValue('--quality', I, V, ErrorText) then Exit;
-      if not IsUnsignedDecimal(V, N) or (N < 10) or (N > 90) then
+      if not IsUnsignedDecimal(V, N) or (N < 1) or (N > 100) then
       begin
-        ErrorText := '--quality doit etre entre 10 et 90';
+        ErrorText := '--quality doit etre entre 1 et 100';
         Exit;
       end;
       Options.Quality := N;

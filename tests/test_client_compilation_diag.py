@@ -3,13 +3,14 @@
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 c=(root/'client/kvm_view_form.pas').read_text()
+w=(root/'client/kvm_video_worker.pas').read_text()
 ws=(root/'shared/kvm_wire.pas').read_text()
 s=(root/'server/kvm_server.pas').read_text()
 assert 'procedure TKvmViewForm.SetStatus(const TextA: string);' in c
 assert 'FStatus.Caption := TextA;' in c
 assert 'FStatus.Caption := Text;' not in c
-assert 'Visible1: Boolean;' in c
-assert 'ReadCursor(Frame.payload, CX, CY, Visible1)' in c
+assert 'Visible1,Available,StateChanged: Boolean;' in w
+assert 'ReadCursor(Packet,CX,CY,Visible1)' in w
 assert 'SetCaptureControl(FView)' in c
 assert 'THttpRequestExtendedOptions' in c
 assert 'TargetURI.FromScheme(WS_SCHEME[FTls.Checked]' in c
