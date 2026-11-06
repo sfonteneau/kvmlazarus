@@ -75,6 +75,7 @@ for path in ROOT.rglob("*.lpi"):
 wire = text("shared/kvm_wire.pas")
 server = text("server/kvm_server.pas")
 client = text("client/kvm_view_form.pas")
+worker = text("client/kvm_video_worker.pas")
 flow = text("shared/kvm_flow.pas")
 video = text("server/kvm_video.pas")
 cli = text("shared/kvm_cli.pas")
@@ -86,9 +87,9 @@ for word in ["MakeBatchNack", "ReadBatchNack", "ReadCursor", "ReadTextUtf8", "KV
 for word in ["RejectFlowBatch", "AcknowledgeFlowBatch", "InvalidateFlowGeometry", "FlowTimedOut"]:
     check(word in flow and word in server, f"Missing flow integration {word}")
 check("ReadBatchNack(Frame.payload,Serial)" in server, "NACK dispatch")
-check("MakeBatchNack(Serial)" in client and "ReadBatchEnd" in client, "NACK client")
-check("JpegMatchesSize(Jpeg, W, H)" in client, "Validate JPEG before decode")
-check("ERR PROTOCOL" in client and "PreserveMarkersLocked" in client, "Overflow closes; resync preserves delimiters")
+check("MakeBatchNack(Serial)" in worker and "ReadBatchEnd" in worker, "NACK client")
+check("JpegMatchesSize(JPEG,W,H)" in worker, "Validate JPEG before decode")
+check("ERR PROTOCOL" in client and "KVM_DECODE_QUEUE_BYTES" in worker, "Overflow closes; resync preserves delimiters")
 check("QuartzMouseEvent" in text("server/kvm_inject_mac.pas"), "macOS drag state integration")
 check("CGDisplayCreateImage" not in text("server/kvm_capture_mac.pas"), "No deprecated macOS capture fallback")
 check("SCFrameStatusComplete" in text("native/macos/kvm_sck.m"), "Only complete SCK frames")
@@ -114,13 +115,13 @@ for name in ["kvm_capture_win", "kvm_capture_x11", "kvm_capture_mac"]:
     check(name + ".CloseCapture" in text("server/kvm_desktop.pas"), f"Cleanup {name}")
 check("CloseDesktopCapture;" in server, "Capture worker owns native cleanup")
 check("TJFLAG_NOREALLOC" in text("server/kvm_turbojpeg.pas"), "Reusable TurboJPEG output buffer")
-check("FCursorVisible := CursorVisible" in client, "Cursor hide packet")
+check("FCursorVisible:=Snapshot.CursorVisible" in client, "Cursor hide packet")
 
 # These are integration-presence checks, not proof of API or thread correctness.
 for token in ["AllowUpgrade", "AcceptPacket", "LastTextReceipt", "KVM_AUTH_TIMEOUT_MS",
               "FMetrics.Queue", "KVM_INPUT_PARTIAL", "PollSessionGuard"]:
     check(token in server, "v9 server integration: " + token)
-for token in ["ReadDesktopState", "ApplyVideo", "FInputs.Receipt", "PrepareClientTls"]:
+for token in ["ReadDesktopState", "PresentSnapshot", "FInputs.Receipt", "PrepareClientTls"]:
     check(token in client, "v9 client integration: " + token)
 check("mormot.lib.openssl11" in text("shared/kvm_tls_policy.pas"), "Load POSIX TLS provider")
 check("mormot.lib.openssl11" in text("server/MeshKVMServer.lpr"), "Load server TLS provider")

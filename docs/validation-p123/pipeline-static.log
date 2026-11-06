@@ -1,0 +1,5 @@
+PASS: static pipeline invariants, JPEG sample and 1000 independent copy cases
+PASS: static bounds and optimized code paths (no runtime / FPS measurement)
+PASS: 13 checks for overlay structure and session behavior (not compiled)
+OK - messages de diagnostic distincts dans les sources (test lexical uniquement)
+OK : journal GUI, 0 WriteLn dans le client, projet XML valide

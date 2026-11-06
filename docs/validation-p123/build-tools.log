@@ -1,0 +1,9 @@
+........+ cc -std=c11 -O2 -fPIC -Wno-misleading-indentation -DKVM_STATIC_BUILD -c /mnt/data/_p123_work/MeshKVM/native/session/kvm_session_linux.c -o /tmp/tmpilsh140m/libkvm_session.o
++ ar rcs /tmp/tmpilsh140m/libkvm_session.a /tmp/tmpilsh140m/libkvm_session.o
++ nm -g /tmp/tmpilsh140m/libkvm_session.a
++ nm -g /tmp/tmpilsh140m/libkvm_session.a
+.....
+----------------------------------------------------------------------
+Ran 13 tests in 0.770s
+
+OK

@@ -41,6 +41,7 @@ uses {$IFDEF KVM_STANDALONE}kvm_turbojpeg_static,{$ENDIF} kvm_wire;
 
 const
   TJPF_RGB = 0;
+  TJPF_BGR = 1;
   // Chroma 4:4:4: no loss of color resolution around desktop text/icons.
   TJSAMP_444 = 0;
   TJFLAG_NOREALLOC = 1024;
@@ -124,6 +125,7 @@ var
   Needed, Size: culong;
   Dst, Src: PByte;
   Offset: PtrUInt;
+  PixelFormat: CInt;
 begin
   Result := False;
   Jpeg := '';
@@ -140,7 +142,9 @@ begin
   Size := culong(Length(FScratch));
   Offset := PtrUInt((Y * Frame.Width + X) * 3);
   Src := PByte(PtrUInt(@Frame.RGB[1]) + Offset);
-  if FCompress(FHandle, Src, W, Frame.Width * 3, H, TJPF_RGB,
+  PixelFormat := TJPF_RGB;
+  if Frame.Order = kpoBGR then PixelFormat := TJPF_BGR;
+  if FCompress(FHandle, Src, W, Frame.Width * 3, H, PixelFormat,
     @Dst, @Size, TJSAMP_444, Quality,
     TJFLAG_NOREALLOC) <> 0 then
     raise ETurboJpeg.Create(ErrorMessage);

@@ -20,8 +20,8 @@ consigne a l'encodeur, pas une borne du trafic instantane. Les plafonds de paylo
 et la contre-pression restent actifs independamment du codec.
 
 Conversion RGB24 vers NV12 et readback capture restent sur CPU ; VAAPI/QSV ont
-un upload materiel supplementaire. Le client decode sur CPU et convertit vers
-un bitmap LCL via un tampon BMP ; cela ajoute des copies. Pas de pipeline
+un upload materiel supplementaire. Depuis P1/P2/P3, le client decode sur un worker CPU dans une surface BGRX32,
+puis presente un DIB Windows ou importe une surface complete dans LCL. Pas de pipeline
 capture-texture -> encodeur zero-copy, ni d'indicateur de latence photon a photon.
 Un profil utilise un handle natif par encodeur, un client n'a pas son propre
 encodeur dedie. Plusieurs profils/GPU sessions peuvent consommer de la memoire
@@ -78,8 +78,8 @@ Il contient des compteurs cumulatifs, ecrits environ chaque seconde et a l'arret
 
 Une capture compte comme reussie avant une eventuelle revalidation de session ;
 elle peut donc ne pas etre diffusee. Le temps du pipeline n'est pas le temps
-pur du compresseur. L'ACK du client LCL intervient apres application au bitmap,
-mais ne prouve pas le rafraichissement physique de l'ecran.
+pur du compresseur. Depuis P1/P2/P3, l'ACK intervient apres composition dans le framebuffer CPU
+du worker, avant la peinture LCL ; il ne mesure pas le rafraichissement physique.
 
 ```sh
 python3 tools/summarize_metrics.py run-serveur.csv --output resume-serveur.json

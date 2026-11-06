@@ -67,7 +67,7 @@ begin
   // Size cap is independent of the tile-count cap.
   for I := 0 to 29 do
   begin
-    Cache[I] := StringOfChar('x', 750000);
+    Cache[I] := StringOfChar('x', 750000); Cache[I][1] := 'T';
     Inc(Versions[I]);
   end;
   Check(PrepareFlowBatch(State, Cache, Versions, Groups, False, 0, 0,

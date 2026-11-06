@@ -11,7 +11,7 @@ uses
   mormot.net.ws.core, mormot.net.ws.client,
   kvm_wire, kvm_cli, kvm_jpeg_guard, kvm_extwire, kvm_codec, kvm_frame,
   kvm_rgb_bitmap, kvm_input_queue, kvm_security, kvm_tls_policy,
-  kvm_turbojpeg_decode, kvm_client_log;
+  kvm_video_worker, kvm_surface, kvm_client_log;
 
 type
   TKvmViewForm = class(TForm)
@@ -22,7 +22,6 @@ type
     FConnect, FDisconnect, FRefresh, FText: TButton;
     FControl, FRemoteKeys: TCheckBox;
     FAllowInsecure, FEnableH264, FTransportFault: Boolean;
-    FH264Decoder: TKvmH264Decoder;
     FInputs: TKvmInputQueue;
     FDesktopEpoch: Cardinal;
     FTls: TCheckBox;
@@ -31,27 +30,14 @@ type
     FView: TPaintBox;
     FTimer: TTimer;
     FBitmap: TBitmap;
-    FJpegImage: TJPEGImage;
-    FJpegStream: TMemoryStream;
-    FTurboDecoder: TKvmTurboJpegDecoder;
-    FTileBitmap: TBitmap;
-    FTileBmpBytes: RawByteString;
-    FTileBgrBytes: RawByteString;
-    FUseRawImage: Boolean;
-    FNativeDecodeMs, FRawImportMs, FBlitMs, FPaintMs: QWord;
-    FRawTiles, FPaintCount: Cardinal;
-    FStatsTick, FDecodeMs: QWord;
-    FDecodedTiles, FAckedBatches: Cardinal;
-    FTurboTiles, FFallbackTiles: Cardinal;
+    FDecoder: TKvmVideoWorker;
+    FFront: TKvmPresentation;
+    FUseRawImage, FWorkerFault, FPolling: Boolean;
+    FRawImportMs, FPaintMs, FStatsTick: QWord;
+    FPaintCount, FPresentCount: Cardinal;
     FSocket: THttpClientWebSockets;
     FLock: TRTLCriticalSection;
-    FPendingPackets: array of RawByteString;
-    FPendingBytes: Int64;
-    FNeedRefresh: Boolean;
-    FLastRefreshTick: QWord;
     FPendingTexts: array of string;
-    FPendingCursor, FPendingCursorVisible: Boolean;
-    FPendingCursorX, FPendingCursorY: Word;
     FCursorVisible: Boolean;
     FCursorX, FCursorY: Word;
     FControlGranted: Boolean;
@@ -65,7 +51,7 @@ type
     FLastMouseTick: QWord;
     FPendingMouseMove: Boolean;
     FPendingMouseX, FPendingMouseY: Word;
-    FAutoConnect, FDropUntilScreen, FBatchInvalid: Boolean;
+    FAutoConnect: Boolean;
 
     procedure ConnectClick(Sender: TObject);
     procedure MenuClick(Sender: TObject);
@@ -82,7 +68,9 @@ type
     procedure KeyboardModeClick(Sender: TObject);
     procedure TransmitPacket(const Payload: RawByteString);
     procedure DrainInputs;
-    procedure PreserveMarkersLocked;
+    procedure StopVideoWorker;
+    procedure DecodeReply(const Payload: RawByteString);
+    procedure PresentSnapshot(const Snapshot: TKvmPresentation);
     procedure IncomingFrame(Sender: TWebSocketProcess;
       const Frame: TWebSocketFrame);
     procedure PollTimer(Sender: TObject);
@@ -105,10 +93,6 @@ type
     function ToNormalized(X, Y: Integer; out NX, NY: Word): Boolean;
     function MouseButtonCode(Button: TMouseButton): Byte;
     procedure SetStatus(const TextA: string);
-    function ApplyScreen(const Packet: RawByteString): Boolean;
-    function ApplyTile(const Packet: RawByteString): Boolean;
-    function ApplyVideo(const Packet: RawByteString): Boolean;
-    procedure InvalidateBatchAndResync;
     procedure CloseSocket;
   public
     procedure ApplyOptions(const Options: TKvmClientOptions);
@@ -117,6 +101,10 @@ type
   end;
 
 implementation
+
+{$IFDEF WINDOWS}
+uses kvm_present_win;
+{$ENDIF}
 
 const
   // 12 ms cap: mouse moves are coalesced by the UI instead of discarded.
@@ -141,22 +129,8 @@ begin
   OnResize := @WindowResized;
 
   FBitmap := TBitmap.Create;
-  // Reuse the JPEG decoder and stream across rectangles on the GUI thread.
-  FJpegImage := TJPEGImage.Create;
-  FJpegStream := TMemoryStream.Create;
-  FTileBitmap := TBitmap.Create;
-  FTurboDecoder := TKvmTurboJpegDecoder.Create;
-  // Emergency escape hatch for older widgetsets: use the tested BMP path.
   FUseRawImage := GetEnvironmentVariable('MESHKVM_RAW_IMAGE') <> '0';
-  FNativeDecodeMs := 0; FRawImportMs := 0; FBlitMs := 0;
-  FRawTiles := 0; FPaintMs := 0; FPaintCount := 0;
-  if FTurboDecoder.Available then
-    KvmClientLog('[client-video] TurboJPEG natif disponible pour le decodage')
-  else
-    KvmClientLog('[client-video] TurboJPEG absent : repli sur TJPEGImage LCL');
   FStatsTick := GetTickCount64;
-  FDecodeMs := 0; FDecodedTiles := 0; FAckedBatches := 0;
-  FTurboTiles := 0; FFallbackTiles := 0;
   FInputs := TKvmInputQueue.Create; FEnableH264:=True;
   FSocket := nil;
   FClosing := False;
@@ -167,13 +141,8 @@ begin
   FLastShift := [];
   FillChar(FSuppressedKeys, SizeOf(FSuppressedKeys), 0);
   FCursorVisible := False;
-  FPendingCursor := False;
   FKeyboardFocus := False;
-  FNeedRefresh := False;
-  FLastRefreshTick := 0;
   FAutoConnect := False;
-  FDropUntilScreen := False;
-  FBatchInvalid := False;
   FDesktopPaused := True;
   WebSocketsMaxFrameMB := 4;
 
@@ -311,9 +280,8 @@ destructor TKvmViewForm.Destroy;
 begin
   FClosing := True;
   if FTimer<>nil then FTimer.Enabled:=False;
-  if FView<>nil then CloseSocket else FreeAndNil(FSocket);
-  FTurboDecoder.Free; FTileBitmap.Free;
-  FJpegStream.Free; FJpegImage.Free;
+  if FView<>nil then CloseSocket
+  else begin StopVideoWorker; FreeAndNil(FSocket); end;
   FBitmap.Free; FInputs.Free;
   DoneCriticalSection(FLock);
   inherited Destroy;
@@ -373,17 +341,43 @@ begin
   SetCommandsVisible(not FTop.Visible);
 end;
 
+procedure TKvmViewForm.StopVideoWorker;
+var Worker: TKvmVideoWorker;
+begin
+  // Detach before joining: IncomingFrame cannot enqueue into a freed worker.
+  EnterCriticalSection(FLock);
+  try Worker:=FDecoder; FDecoder:=nil;
+  finally LeaveCriticalSection(FLock); end;
+  if Worker<>nil then begin Worker.Stop; Worker.Free; end;
+end;
+
+procedure TKvmViewForm.DecodeReply(const Payload: RawByteString);
+var Frame: TWebSocketFrame;
+begin
+  // Called only by the decode worker. CloseSocket joins it BEFORE releasing
+  // FSocket; mORMot2 SendFrame serializes writes with its own output lock.
+  if (FSocket=nil) or (FSocket.WebSockets=nil) then Exit;
+  Frame.opcode:=focBinary; Frame.content:=[]; Frame.tix:=0;
+  Frame.payload:=Copy(Payload,1,Length(Payload));
+  try
+    if FSocket.WebSockets.SendFrame(Frame) then Exit;
+  except end;
+  EnterCriticalSection(FLock);
+  try FWorkerFault:=True; finally LeaveCriticalSection(FLock); end;
+end;
+
 procedure TKvmViewForm.CloseSocket;
 begin
   // Best-effort release. The server also has disconnect/heartbeat cleanup.
   if FAuthorized and FControlGranted and (FSocket <> nil) then
     SendPacket('L');
+  StopVideoWorker; // stops ACK sends before freeing the WebSocket
   // Freeing the mORMot client waits for its WebSocket processing thread.
   FreeAndNil(FSocket); FTransportFault:=False;
-  FreeAndNil(FH264Decoder); FInputs.Reset; FDesktopEpoch:=0;
+  if FInputs<>nil then FInputs.Reset; FDesktopEpoch:=0;
+  ClearSurface(FFront.Surface);
   FStatsTick := GetTickCount64;
-  FDecodeMs := 0; FDecodedTiles := 0; FAckedBatches := 0;
-  FTurboTiles := 0; FFallbackTiles := 0;
+  FRawImportMs:=0; FPaintMs:=0; FPaintCount:=0; FPresentCount:=0;
   FAuthorized := False;
   FRemoteControl := False;
   FControlGranted := False;
@@ -405,13 +399,8 @@ begin
   FTls.Enabled := True;
   EnterCriticalSection(FLock);
   try
-    SetLength(FPendingPackets, 0);
-    FPendingBytes := 0;
     SetLength(FPendingTexts, 0);
-    FPendingCursor := False;
-    FNeedRefresh := False;
-    FDropUntilScreen := False;
-    FBatchInvalid := False;
+    FWorkerFault:=False;
   finally
     LeaveCriticalSection(FLock);
   end;
@@ -458,10 +447,7 @@ begin
     end;
     PrepareClientTls(FTlsCaFile,TLSContext);
   end;
-  Capability:='jpeg';
-  if FEnableH264 then
-    try FH264Decoder:=TKvmH264Decoder.Create; Capability:='h264';
-    except on E: Exception do begin FreeAndNil(FH264Decoder); SetStatus('Decodeur H264 absent : JPEG uniquement'); end; end;
+
   // Configuration identique au chemin historique, mais avec un diagnostic
   // d'echec de negotiation (HTTP 400, 404, 429, erreur TLS, etc.).
   ConnectOptions.InitDefault;
@@ -476,9 +462,15 @@ begin
     FConnect.Enabled := True;
     Exit;
   end;
-  Proto := TWebSocketProtocolChat.Create(KVM_SUBPROTOCOL, KVM_WS_PATH,
-    @IncomingFrame);
   try
+    FDecoder:=TKvmVideoWorker.Create(FEnableH264,@DecodeReply);
+    Capability:='jpeg';
+    if FDecoder.H264Available then Capability:='h264';
+    if FDecoder.NativeAvailable then
+      KvmClientLog('[client-video] TurboJPEG sur worker; ACK apres composition CPU')
+    else KvmClientLog('[client-video] Repli FCL JPEG sur worker (aucun decodage GUI)');
+    Proto := TWebSocketProtocolChat.Create(KVM_SUBPROTOCOL, KVM_WS_PATH,
+      @IncomingFrame);
     // La methode mORMot2 gere la destruction de Proto, y compris en echec.
     ConnectError := '';
     FSocket := THttpClientWebSockets.WebSocketsConnect(
@@ -569,20 +561,22 @@ begin
 end;
 
 procedure TKvmViewForm.ApplyDesktopState(Available: Boolean; Reason: Byte; Epoch: Cardinal);
+var EpochChanged: Boolean;
 begin
   if (FDesktopPaused=(not Available)) and (FDesktopEpoch=Epoch) then Exit;
+  EpochChanged:=FDesktopEpoch<>Epoch;
   FDesktopEpoch:=Epoch;
   FDesktopPaused := not Available;
-  if not Available then
+  if not Available or EpochChanged then
   begin
     ResetLocalInputs; FControlGranted := False; FControl.Checked := False;
     FControl.Enabled := False; FText.Enabled := False;
     FCursorVisible := False; FBitmap.SetSize(0,0);
-    FBatchInvalid := True;
+    ClearSurface(FFront.Surface);
     FInputs.CancelQueued;
     SetStatus(DesktopStateText(Reason)+'. Controle retire.');
-  end
-  else
+  end;
+  if Available then
   begin
     FControl.Enabled := FAuthorized and FRemoteControl;
     SetStatus('Bureau disponible. Redemander le controle si necessaire.');
@@ -607,79 +601,16 @@ end;
 
 procedure TKvmViewForm.IncomingFrame(Sender: TWebSocketProcess;
   const Frame: TWebSocketFrame);
-var
-  N: Integer;
-  CX, CY: Word;
-  Visible1: Boolean;
-  TextMsg: string;
+var N: Integer; TextMsg: string;
 begin
   if FClosing then Exit;
   case Frame.opcode of
     focBinary:
       begin
-        if ReadCursor(Frame.payload, CX, CY, Visible1) then
-        begin
-          EnterCriticalSection(FLock);
-          try
-            FPendingCursorVisible := Visible1;
-            FPendingCursorX := CX;
-            FPendingCursorY := CY;
-            FPendingCursor := True;
-          finally
-            LeaveCriticalSection(FLock);
-          end;
-          Exit;
-        end;
-        if (Length(Frame.payload) <> 0) and
-           (Frame.payload[1] in ['S', 'T', 'V', 'B', 'D', 'I']) then
-        begin
-          EnterCriticalSection(FLock);
-          try
-            // A new S is the beginning of a fresh, ordered snapshot.
-            if Frame.payload[1] = 'S' then
-            begin
-              // Preserve binary D/B order; a screen reset must not erase
-              // the preceding session-state message or an ACK delimiter.
-              FDropUntilScreen := False;
-              // Do not erase a previous lost-batch notice before the UI sees its B.
-            end;
-            if (Length(Frame.payload)>KVM_MAX_VIDEO_BYTES+KVM_VIDEO_HEADER) or
-               ((Frame.payload[1] in ['S','B']) and (Length(Frame.payload)<>5)) or
-               ((Frame.payload[1]='D') and (Length(Frame.payload)<>7)) or
-               ((Frame.payload[1]='I') and (Length(Frame.payload)<>8)) or
-               ((Frame.payload[1]='T') and (Length(Frame.payload)<13)) or
-               ((Frame.payload[1]='V') and (Length(Frame.payload)<15)) then
-            begin
-              SetLength(FPendingTexts,1);
-              FPendingTexts[0]:=Format('LOCAL PROTOCOL: trame %s de %d octets (taille invalide)',
-                [string(Frame.payload[1]),Length(Frame.payload)]);
-              SetLength(FPendingPackets,0); FPendingBytes:=0;
-            end
-            else if (not FDropUntilScreen) or (Frame.payload[1] in ['B','D','I']) then
-            begin
-              N := Length(FPendingPackets);
-              if (N < 128) and
-                 (FPendingBytes + Length(Frame.payload) <= 16 * 1024 * 1024) then
-              begin
-                SetLength(FPendingPackets, N + 1);
-                FPendingPackets[N] := Frame.payload;
-                Inc(FPendingBytes, Length(Frame.payload));
-              end
-              else
-              begin
-                // With one bounded batch in flight, this limit cannot be
-                // reached by a conforming server. Close rather than losing
-                // desktop-state or text receipts and acknowledging stale pixels.
-                SetLength(FPendingTexts,1);
-                FPendingTexts[0]:=Format('LOCAL PROTOCOL: file reception pleine (%d trames, %d octets, nouveau %d octets)',
-                  [N,FPendingBytes,Length(Frame.payload)]);
-                SetLength(FPendingPackets,0); FPendingBytes:=0;
-              end;
-            end;
-          finally
-            LeaveCriticalSection(FLock);
-          end;
-        end;
+        EnterCriticalSection(FLock);
+        try
+          if FDecoder<>nil then FDecoder.Enqueue(Frame.payload);
+        finally LeaveCriticalSection(FLock); end;
       end;
     focText, focConnectionClose:
       begin
@@ -714,57 +645,63 @@ begin
   end;
 end;
 
+procedure TKvmViewForm.PresentSnapshot(const Snapshot: TKvmPresentation);
+var Raw: TRawImage; Tick: QWord;
+begin
+  if not Snapshot.Available or (Snapshot.Epoch<>FDesktopEpoch) or
+     FDesktopPaused or not SurfaceValid(Snapshot.Surface) then Exit;
+  if (FFront.Surface.Width<>Snapshot.Surface.Width) or
+     (FFront.Surface.Height<>Snapshot.Surface.Height) then
+    SetStatus(Format('Bureau distant : %d x %d | worker video / F8 commandes',
+      [Snapshot.Surface.Width,Snapshot.Surface.Height]));
+  FFront:=Snapshot;
+  FCursorX:=Snapshot.CursorX; FCursorY:=Snapshot.CursorY;
+  FCursorVisible:=Snapshot.CursorVisible;
+  Tick:=GetTickCount64;
+  // Windows paints the CPU BGRX DIB directly, no per-tile LCL bitmap/import.
+  // Other widgetsets import ONE coherent image per presentation, not each tile.
+  {$IFDEF WINDOWS}
+  if not FUseRawImage then
+  {$ENDIF}
+  begin
+    Raw.Init;
+    Raw.Description.Init_BPP32_B8G8R8_BIO_TTB(FFront.Surface.Width,FFront.Surface.Height);
+    Raw.Data:=PByte(Pointer(FFront.Surface.Pixels));
+    Raw.DataSize:=Length(FFront.Surface.Pixels);
+    FBitmap.LoadFromRawImage(Raw,False);
+  end;
+  Inc(FRawImportMs,GetTickCount64-Tick); Inc(FPresentCount);
+  FView.Invalidate;
+end;
+
 procedure TKvmViewForm.PollTimer(Sender: TObject);
 var
-  Packets: array of RawByteString;
   TextMsgs: array of string;
-  TextMsg: string;
-  N, I, Total: Integer;
-  NeedRefresh, Ready, CursorChanged, RejectBatch, CursorVisible: Boolean;
-  Serial, Epoch: Cardinal;
-  Reason, InputStatus: Byte; Applied: Word; Available: Boolean;
-  CX, CY: Word;
-  StartDecode, NowTick: QWord;
+  TextMsg, FatalError: string;
+  Events: TKvmPacketList;
+  Snapshot: TKvmPresentation;
+  Stats: TKvmDecodeStats;
+  I: Integer;
+  HasSnapshot, Available: Boolean;
+  Epoch: Cardinal; Reason, InputStatus: Byte; Applied: Word;
+  NowTick: QWord;
 begin
-  if FTransportFault then
-  begin
-    CloseSocket; SetStatus('Envoi reseau interrompu : connexion fermee, aucune saisie rejouee.'); Exit;
-  end;
-  if FAutoConnect then
-  begin
-    FAutoConnect := False;
-    ConnectClick(nil);
-  end;
-  EnterCriticalSection(FLock);
+  if FPolling or FClosing then Exit;
+  FPolling:=True;
   try
-    TextMsgs := Copy(FPendingTexts, 0, Length(FPendingTexts));
-    SetLength(FPendingTexts, 0);
-    Total := Length(FPendingPackets);
-    Ready := FAuthorized;
-    for I := 0 to High(TextMsgs) do
-      if (TextMsgs[I] = 'OK CTRL') or (TextMsgs[I] = 'OK VIEW') then
-        Ready := True;
-    if Ready then N := Min(Total, 24) else N := 0;
-    SetLength(Packets, N);
-    for I := 0 to N - 1 do
+    if FTransportFault then
     begin
-      Packets[I] := FPendingPackets[I];
-      Dec(FPendingBytes, Length(FPendingPackets[I]));
+      CloseSocket; SetStatus('Envoi reseau interrompu : aucune saisie rejouee.'); Exit;
     end;
-    for I := N to Total - 1 do
-      FPendingPackets[I - N] := FPendingPackets[I];
-    SetLength(FPendingPackets, Total - N);
-    NeedRefresh := FNeedRefresh;
-    FNeedRefresh := False;
-    CursorChanged := FPendingCursor;
-    CursorVisible := FPendingCursorVisible;
-    CX := FPendingCursorX;
-    CY := FPendingCursorY;
-    FPendingCursor := False;
-  finally
-    LeaveCriticalSection(FLock);
-  end;
-
+    if FAutoConnect then begin FAutoConnect:=False; ConnectClick(nil); end;
+    HasSnapshot:=False; FatalError:='';
+    EnterCriticalSection(FLock);
+    try
+      TextMsgs:=FPendingTexts; FPendingTexts:=nil;
+      if FWorkerFault then FatalError:='Envoi ACK interrompu';
+    finally LeaveCriticalSection(FLock); end;
+    if FatalError<>'' then
+    begin CloseSocket; SetStatus(FatalError); Exit; end;
   for I := 0 to High(TextMsgs) do
   begin
     TextMsg := TextMsgs[I];
@@ -831,294 +768,72 @@ begin
     end;
   end;
 
-  if FAuthorized then
-  begin
-    // Flush the latest move even if no more GUI mouse events arrive.
-    // A coalesced move is never allowed to outlive a release or focus loss.
-    if FPendingMouseMove and ControlAllowed and
-       (GetTickCount64-FLastMouseTick >= KVM_MOUSE_INTERVAL_MS) then
+    if not FAuthorized then Exit;
+    if FDecoder<>nil then
+      FDecoder.DrainUI(Events,Snapshot,HasSnapshot,FatalError);
+    if FatalError<>'' then
     begin
-      FPendingMouseMove := False;
-      FLastMouseTick := GetTickCount64;
-      SendPacket(MakeMouse(0,0,FPendingMouseX,FPendingMouseY));
+      KvmClientLog('[client-video] erreur worker: '+FatalError);
+      CloseSocket; SetStatus('Erreur video : '+FatalError); Exit;
     end;
-    if FInputs.TimedOut(GetTickCount64) then
-    begin
-      CloseSocket; SetStatus('Accuse de saisie absent : resultat inconnu, aucun renvoi automatique.'); Exit;
-    end;
-    if NeedRefresh then FBatchInvalid:=True;
-    if (GetTickCount64 - FLastHeartbeat >= 3000) then
-    begin
-      FLastHeartbeat := GetTickCount64;
-      SendPacket('P');
-    end;
-    if NeedRefresh then
-    begin
-      if GetTickCount64 - FLastRefreshTick >= 2000 then
-      begin
-        FLastRefreshTick := GetTickCount64;
-        SendPacket('R');
-      end
-      else
-      begin
-        EnterCriticalSection(FLock);
-        try
-          FNeedRefresh := True;
-        finally
-          LeaveCriticalSection(FLock);
-        end;
-      end;
-    end;
-    for I := 0 to High(Packets) do
-    begin
-      if Packets[I] = '' then Continue;
-      case Packets[I][1] of
+    // Desktop transitions and input receipts are never coalesced/dropped.
+    for I:=0 to High(Events) do
+      case Events[I][1] of
         'D':
-          if ReadDesktopState(Packets[I],Available,Reason,Epoch) then
+          if ReadDesktopState(Events[I],Available,Reason,Epoch) then
             ApplyDesktopState(Available,Reason,Epoch)
           else begin CloseSocket; SetStatus('Etat de session invalide'); Exit; end;
         'I':
           begin
-            if not FInputs.Receipt(Packets[I],InputStatus,Applied) then
+            if not FInputs.Receipt(Events[I],InputStatus,Applied) then
             begin CloseSocket; SetStatus('Accuse de saisie invalide'); Exit; end;
             if InputStatus=KVM_INPUT_STALE then
-            begin CloseSocket; SetStatus('Sequence de saisie desynchronisee : aucun renvoi'); Exit; end;
+            begin CloseSocket; SetStatus('Sequence de saisie desynchronisee'); Exit; end;
             if InputStatus<>KVM_INPUT_OK then
             begin
               FInputs.CancelQueued; TransmitPacket('Z'); ResetLocalInputs;
-              SetStatus(Format('Saisie refusee/partielle (statut %d, %d points soumis). Pas de renvoi.',[InputStatus,Applied]));
+              SetStatus(Format('Saisie refusee/partielle (%d, %d points)',[InputStatus,Applied]));
             end;
             DrainInputs;
           end;
-        'V':
-          if not FDesktopPaused and not FBatchInvalid then
-            if not ApplyVideo(Packets[I]) then
-            begin FBatchInvalid:=True; InvalidateBatchAndResync; end;
-        'S':
-          begin
-            // Failed batches can only be recovered by a new screen reset.
-            FBatchInvalid := FDesktopPaused or not ApplyScreen(Packets[I]);
-            if FBatchInvalid then InvalidateBatchAndResync;
-          end;
-        'T':
-          if not FDesktopPaused and not FBatchInvalid then
-          begin
-            StartDecode := GetTickCount64;
-            if not ApplyTile(Packets[I]) then
-            begin
-              FBatchInvalid := True;
-              InvalidateBatchAndResync;
-            end
-            else Inc(FDecodedTiles);
-            Inc(FDecodeMs, GetTickCount64 - StartDecode);
-          end;
-        'B':
-          begin
-            RejectBatch := FBatchInvalid or FDesktopPaused;
-            EnterCriticalSection(FLock);
-            try
-              RejectBatch := RejectBatch or FDropUntilScreen;
-            finally
-              LeaveCriticalSection(FLock);
-            end;
-            if ReadBatchEnd(Packets[I], Serial) then
-              if RejectBatch then SendPacket(MakeBatchNack(Serial))
-              else
-              begin
-                Inc(FAckedBatches);
-                SendPacket(MakeBatchAck(Serial));
-              end;
-          end;
       end;
-    end;
-    if CursorChanged then
+    if HasSnapshot then
+      try PresentSnapshot(Snapshot);
+      except on E: Exception do
+        begin CloseSocket; SetStatus('Affichage impossible : '+E.Message); Exit; end; end;
+    if FPendingMouseMove and ControlAllowed and
+       (GetTickCount64-FLastMouseTick>=KVM_MOUSE_INTERVAL_MS) then
     begin
-      FCursorX := CX;
-      FCursorY := CY;
-      FCursorVisible := CursorVisible and not FDesktopPaused;
+      FPendingMouseMove:=False; FLastMouseTick:=GetTickCount64;
+      SendPacket(MakeMouse(0,0,FPendingMouseX,FPendingMouseY));
     end;
-    if (Length(Packets) <> 0) or CursorChanged then FView.Invalidate;
-    NowTick := GetTickCount64;
-    if NowTick - FStatsTick >= 5000 then
+    if FInputs.TimedOut(GetTickCount64) then
+    begin CloseSocket; SetStatus('Accuse de saisie absent : aucun renvoi'); Exit; end;
+    if GetTickCount64-FLastHeartbeat>=3000 then
+    begin FLastHeartbeat:=GetTickCount64; SendPacket('P'); end;
+    NowTick:=GetTickCount64;
+    if (NowTick-FStatsTick>=5000) and (FDecoder<>nil) then
     begin
-      // ACK/s is not FPS: a full snapshot may require multiple batches.
-      KvmClientLog('[client-video] ACK/s=' +
-        FormatFloat('0.0', FAckedBatches * 1000.0 / (NowTick-FStatsTick)) +
-        ' JPEG/s=' + FormatFloat('0.0', FDecodedTiles * 1000.0 / (NowTick-FStatsTick)) +
-        ' traitement total ms=' + IntToStr(Int64(FDecodeMs)) +
-        ' decomp. native ms=' + IntToStr(Int64(FNativeDecodeMs)) +
-        ' import LCL ms=' + IntToStr(Int64(FRawImportMs)) +
-        ' dessin ms=' + IntToStr(Int64(FBlitMs)) +
-        ' PaintBox ms=' + IntToStr(Int64(FPaintMs)) +
-        ' PaintBox/s=' + FormatFloat('0.0', FPaintCount * 1000.0 / (NowTick-FStatsTick)) +
-        ' JPEG direct=' + IntToStr(FRawTiles) +
-        ' TurboJPEG=' + IntToStr(FTurboTiles) + ' LCL=' + IntToStr(FFallbackTiles));
-      FStatsTick := NowTick;
-      FDecodeMs := 0; FDecodedTiles := 0; FAckedBatches := 0;
-      FTurboTiles := 0; FFallbackTiles := 0;
-      FNativeDecodeMs := 0; FRawImportMs := 0; FBlitMs := 0;
-      FRawTiles := 0; FPaintMs := 0; FPaintCount := 0;
+      FDecoder.TakeStats(Stats);
+      KvmClientLog('[client-video] ACK/s='+
+        FormatFloat('0.0',Stats.AckCount*1000.0/(NowTick-FStatsTick))+
+        ' JPEG/s='+FormatFloat('0.0',Stats.JpegCount*1000.0/(NowTick-FStatsTick))+
+        ' decode worker ms='+IntToStr(Int64(Stats.DecodeMs))+
+        ' copie CPU ms='+IntToStr(Int64(Stats.CopyMs))+
+        ' commit+ACK ms='+IntToStr(Int64(Stats.CommitMs))+
+        ' import LCL ms='+IntToStr(Int64(FRawImportMs))+
+        ' PaintBox ms='+IntToStr(Int64(FPaintMs))+
+        ' PaintBox/s='+FormatFloat('0.0',FPaintCount*1000.0/(NowTick-FStatsTick))+
+        ' presentations='+IntToStr(FPresentCount)+
+        ' presentations fusionnees='+IntToStr(Int64(Stats.Coalesced))+
+        ' file max octets='+IntToStr(Int64(Stats.QueueHighBytes))+
+        ' TurboJPEG='+IntToStr(Int64(Stats.NativeCount))+
+        ' FCL='+IntToStr(Int64(Stats.FallbackCount))+
+        ' NACK='+IntToStr(Int64(Stats.NackCount)));
+      FStatsTick:=NowTick; FRawImportMs:=0; FPaintMs:=0;
+      FPaintCount:=0; FPresentCount:=0;
     end;
-  end;
-end;
-
-procedure TKvmViewForm.PreserveMarkersLocked;
-var I,N: Integer;
-begin
-  N:=0; FPendingBytes:=0;
-  for I:=0 to High(FPendingPackets) do
-    if ((Length(FPendingPackets[I])=5) and (FPendingPackets[I][1]='B')) or
-       ((Length(FPendingPackets[I])=7) and (FPendingPackets[I][1]='D')) or
-       ((Length(FPendingPackets[I])=8) and (FPendingPackets[I][1]='I')) then
-    begin
-      FPendingPackets[N]:=FPendingPackets[I]; Inc(FPendingBytes,Length(FPendingPackets[N])); Inc(N);
-    end;
-  SetLength(FPendingPackets,N);
-end;
-
-procedure TKvmViewForm.InvalidateBatchAndResync;
-begin
-  EnterCriticalSection(FLock);
-  try
-    FDropUntilScreen:=True; FNeedRefresh:=True;
-    PreserveMarkersLocked;
-  finally LeaveCriticalSection(FLock); end;
-end;
-
-function TKvmViewForm.ApplyVideo(const Packet: RawByteString): Boolean;
-var W,H: Word; AU,BMP: RawByteString; RGB: TRgbFrame;
-    Error: string; Stream: TMemoryStream;
-begin
-  Result:=False;
-  if (FH264Decoder=nil) or not ReadVideo(Packet,W,H,AU) then Exit;
-  if (FBitmap.Width<>W) or (FBitmap.Height<>H) then Exit;
-  if not FH264Decoder.Decode(AU,W,H,RGB,Error) then
-  begin SetStatus('H264 refuse : '+Error); Exit; end;
-  BMP:=RgbBitmapBytes(RGB); if BMP='' then Exit;
-  Stream:=TMemoryStream.Create;
-  try
-    try
-      Stream.WriteBuffer(BMP[1],Length(BMP)); Stream.Position:=0;
-      FBitmap.LoadFromStream(Stream); Result:=(FBitmap.Width=W) and (FBitmap.Height=H);
-    except on E: Exception do SetStatus('Image H264 non affichee : '+E.Message); end;
-  finally Stream.Free; end;
-end;
-
-function TKvmViewForm.ApplyScreen(const Packet: RawByteString): Boolean;
-var
-  W, H: Word;
-begin
-  Result := ReadScreen(Packet, W, H);
-  if not Result then Exit;
-  try
-    // Avoid a flash to black on a same-size snapshot.
-    if (FBitmap.Width <> W) or (FBitmap.Height <> H) then
-    begin
-      FBitmap.SetSize(W, H);
-      FBitmap.Canvas.Brush.Color := clBlack;
-      FBitmap.Canvas.FillRect(Rect(0, 0, W, H));
-    end;
-    SetStatus(Format('Bureau distant : %d x %d | JPEG / H264 selon codec negocie', [W, H]));
-  except
-    on E: Exception do
-    begin
-      Result := False;
-      SetStatus('Bureau non initialise : ' + E.Message);
-    end;
-  end;
-end;
-
-function TKvmViewForm.ApplyTile(const Packet: RawByteString): Boolean;
-var
-  X, Y, W, H: Word;
-  Jpeg: RawByteString;
-  Raw: TRawImage;
-  Tick: QWord;
-begin
-  Result := ReadTile(Packet, X, Y, W, H, Jpeg);
-  if not Result then Exit;
-  Result := False;
-  if (FBitmap.Width = 0) or (FBitmap.Height = 0) or
-     (Integer(X) + W > FBitmap.Width) or
-     (Integer(Y) + H > FBitmap.Height) then Exit;
-  if not JpegMatchesSize(Jpeg, W, H) then Exit;
-  try
-    // Direct TurboJPEG BGR24 => TRawImage => bitmap. No BMP serialization,
-    // TMemoryStream roundtrip or BMP parsing. The LCL copy is explicit:
-    // ADataOwner=False; decoded buffer can be reused on the next rectangle.
-    // On a widgetset that rejects raw BGR, fall back to the existing path.
-    if FUseRawImage and (FTurboDecoder <> nil) and FTurboDecoder.Available then
-    begin
-      Tick := GetTickCount64;
-      if FTurboDecoder.DecodeToBgr(Jpeg, W, H, FTileBgrBytes) then
-      begin
-        Inc(FNativeDecodeMs, GetTickCount64 - Tick);
-        Raw.Init;
-        Raw.Description.Init_BPP24_B8G8R8_BIO_TTB(W, H);
-        Raw.Data := PByte(@FTileBgrBytes[1]);
-        Raw.DataSize := Length(FTileBgrBytes);
-        Tick := GetTickCount64;
-        try
-          FTileBitmap.LoadFromRawImage(Raw, False);
-          if (FTileBitmap.Width = W) and (FTileBitmap.Height = H) then
-          begin
-            Inc(FRawImportMs, GetTickCount64 - Tick);
-            Tick := GetTickCount64;
-            FBitmap.Canvas.Draw(X, Y, FTileBitmap);
-            Inc(FBlitMs, GetTickCount64 - Tick);
-            Inc(FRawTiles);
-            Inc(FTurboTiles);
-            Result := True;
-            Exit;
-          end;
-        except
-          on E: Exception do
-          begin
-            // Some older LCL widgetsets have incomplete RawImage import.
-            // Disable this fast path for the rest of the session.
-            FUseRawImage := False;
-            KvmClientLog('[client-video] import RawImage non pris en charge : ' +
-              E.Message + ' ; repli sur BMP');
-          end;
-        end;
-      end;
-    end;
-    // Tested fallback: TurboJPEG into BMP and LCL LoadFromStream.
-    if (FTurboDecoder <> nil) and FTurboDecoder.Available and
-       FTurboDecoder.DecodeToBmp(Jpeg, W, H, FTileBmpBytes) then
-    begin
-      Tick := GetTickCount64;
-      FJpegStream.Size := Length(FTileBmpBytes);
-      FJpegStream.Position := 0;
-      FJpegStream.WriteBuffer(FTileBmpBytes[1], Length(FTileBmpBytes));
-      FJpegStream.Position := 0;
-      FTileBitmap.LoadFromStream(FJpegStream);
-      if (FTileBitmap.Width <> W) or (FTileBitmap.Height <> H) then Exit;
-      Inc(FRawImportMs, GetTickCount64 - Tick);
-      Tick := GetTickCount64;
-      FBitmap.Canvas.Draw(X, Y, FTileBitmap);
-      Inc(FBlitMs, GetTickCount64 - Tick);
-      Inc(FTurboTiles);
-    end
-    else
-    begin
-      Tick := GetTickCount64;
-      FJpegStream.Size := Length(Jpeg);
-      FJpegStream.Position := 0;
-      FJpegStream.WriteBuffer(Jpeg[1], Length(Jpeg));
-      FJpegStream.Position := 0;
-      FJpegImage.LoadFromStream(FJpegStream);
-      if (FJpegImage.Width <> W) or (FJpegImage.Height <> H) then Exit;
-      Inc(FRawImportMs, GetTickCount64 - Tick);
-      Tick := GetTickCount64;
-      FBitmap.Canvas.Draw(X, Y, FJpegImage);
-      Inc(FBlitMs, GetTickCount64 - Tick);
-      Inc(FFallbackTiles);
-    end;
-    Result := True;
-  except
-    on E: Exception do SetStatus('JPEG non decode : ' + E.Message);
-  end;
+  finally FPolling:=False; end;
 end;
 
 function TKvmViewForm.GetVideoRect: TRect;
@@ -1127,11 +842,11 @@ var
   W, H: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
-  if (FBitmap.Width = 0) or (FBitmap.Height = 0) or
+  if (FFront.Surface.Width = 0) or (FFront.Surface.Height = 0) or
      (FView.Width < 1) or (FView.Height < 1) then Exit;
-  Scale := Min(FView.Width / FBitmap.Width, FView.Height / FBitmap.Height);
-  W := Max(1, Round(FBitmap.Width * Scale));
-  H := Max(1, Round(FBitmap.Height * Scale));
+  Scale := Min(FView.Width / FFront.Surface.Width, FView.Height / FFront.Surface.Height);
+  W := Max(1, Round(FFront.Surface.Width * Scale));
+  H := Max(1, Round(FFront.Surface.Height * Scale));
   Result.Left := (FView.Width - W) div 2;
   Result.Top := (FView.Height - H) div 2;
   Result.Right := Result.Left + W;
@@ -1147,7 +862,7 @@ var
 begin
   FView.Canvas.Brush.Color := clBlack;
   FView.Canvas.FillRect(FView.ClientRect);
-  if (FBitmap.Width < 1) or (FBitmap.Height < 1) then
+  if (FFront.Surface.Width < 1) or (FFront.Surface.Height < 1) then
   begin
     FView.Canvas.Font.Color := clWhite;
     FView.Canvas.TextOut(20, 20, 'En attente du bureau distant...');
@@ -1155,12 +870,21 @@ begin
   end;
   R := GetVideoRect;
   PaintTick := GetTickCount64;
-  // Avoid an unnecessary scaled blit (and interpolation) at native size.
-  if ((R.Right-R.Left)=FBitmap.Width) and
-     ((R.Bottom-R.Top)=FBitmap.Height) then
-    FView.Canvas.Draw(R.Left,R.Top,FBitmap)
+  {$IFDEF WINDOWS}
+  if FUseRawImage then
+  begin
+    if not PaintWindowsSurface(FView.Canvas.Handle,FFront.Surface,R.Left,R.Top,
+      R.Right-R.Left,R.Bottom-R.Top) then
+      KvmClientLog('[client-video] Echec StretchDIBits Windows');
+  end
   else
-    FView.Canvas.StretchDraw(R, FBitmap);
+  {$ENDIF}
+  begin
+    if ((R.Right-R.Left)=FFront.Surface.Width) and
+       ((R.Bottom-R.Top)=FFront.Surface.Height) then
+      FView.Canvas.Draw(R.Left,R.Top,FBitmap)
+    else FView.Canvas.StretchDraw(R,FBitmap);
+  end;
   Inc(FPaintMs, GetTickCount64-PaintTick);
   Inc(FPaintCount);
   if not FCursorVisible then Exit;

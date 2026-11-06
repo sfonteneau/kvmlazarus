@@ -12,7 +12,7 @@ var
   DIB: HBITMAP;
   OldObj: HGDIOBJ;
   Bits: Pointer;
-  BufferW, BufferH: Integer;
+  BufferW, BufferH, BufferStride: Integer;
 // Called only by the capture worker, including destruction. A GetDC handle
 // must be released on the thread which acquired it.
 procedure CloseCapture;
@@ -22,7 +22,7 @@ begin
   if MemDC <> 0 then DeleteDC(MemDC);
   if ScreenDC <> 0 then ReleaseDC(0, ScreenDC);
   ScreenDC := 0; MemDC := 0; DIB := 0; OldObj := 0; Bits := nil;
-  BufferW := 0; BufferH := 0;
+  BufferW := 0; BufferH := 0; BufferStride := 0;
 end;
 function EnsureBuffer(W, H: Integer): Boolean;
 var BI: TBitmapInfo;
@@ -34,13 +34,16 @@ begin
   FillChar(BI, SizeOf(BI), 0);
   BI.bmiHeader.biSize := SizeOf(TBitmapInfoHeader);
   BI.bmiHeader.biWidth := W; BI.bmiHeader.biHeight := -H;
-  BI.bmiHeader.biPlanes := 1; BI.bmiHeader.biBitCount := 32;
+  BI.bmiHeader.biPlanes := 1; BI.bmiHeader.biBitCount := 24;
   BI.bmiHeader.biCompression := BI_RGB;
   DIB := CreateDIBSection(ScreenDC, BI, DIB_RGB_COLORS, Bits, 0, 0);
   if (DIB = 0) or (Bits = nil) then Exit;
   OldObj := SelectObject(MemDC, DIB);
+  if (OldObj=0) or (PtrUInt(OldObj)=High(PtrUInt)) then
+  begin OldObj:=0; Exit; end;
   SetStretchBltMode(MemDC, HALFTONE); SetBrushOrgEx(MemDC, 0, 0, nil);
-  BufferW := W; BufferH := H; Result := True;
+  BufferW := W; BufferH := H;
+  BufferStride := (W * 3 + 3) and not 3; Result := True;
 end;
 procedure DrawCursor(DC: HDC; const M: TKvmMonitor; W,H: Integer);
 type
@@ -72,7 +75,7 @@ begin
   end;
 end;
 function CaptureDesktopRgb(MaxW, MaxH: Integer; var Frame: TRgbFrame): Boolean;
-var M: TKvmMonitor; W, H, X, Y, At: Integer; P: PByte;
+var M: TKvmMonitor; W, H: Integer;
 begin
   Result := False;
   if not RefreshMonitor then Exit;
@@ -87,14 +90,10 @@ begin
       M.Bounds.W, M.Bounds.H, SRCCOPY or CAPTUREBLT_FLAG);
   if not Result then begin CloseCapture; Exit; end;
   DrawCursor(MemDC,M,W,H);
-  GdiFlush;
-  if not AllocateFrame(Frame, W, H) then Exit(False);
-  for Y := 0 to H-1 do
-    for X := 0 to W-1 do
-    begin
-      P := PByte(PtrUInt(Bits) + PtrUInt(Y*W+X)*4); At := (Y*W+X)*3+1;
-      Frame.RGB[At] := AnsiChar(P[2]); Frame.RGB[At+1] := AnsiChar(P[1]);
-      Frame.RGB[At+2] := AnsiChar(P[0]);
-    end;
+  if not GdiFlush then begin CloseCapture; Exit(False); end;
+  // Native BGR24 stays BGR through damage detection and TurboJPEG. No
+  // per-pixel channel swap; only row padding is removed by bounded copies.
+  Result:=CopyBgrDib24(Bits,SizeUInt(BufferStride)*SizeUInt(H),
+    BufferStride,W,H,Frame);
 end;
 end.

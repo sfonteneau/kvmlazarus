@@ -14,8 +14,10 @@ assert 'CopyFrameRegions' in damage and 'UniqueString(Target.RGB)' in damage
 assert 'TJFLAG_BOTTOMUP = 2' in decoder and 'TJPF_BGR = 1' in decoder
 assert "GetProcedureAddress(FLibrary, 'tjDecompressHeader3')" in decoder
 assert 'ActualW <> W' in decoder and 'ActualH <> H' in decoder
-assert 'FTurboDecoder.DecodeToBmp(Jpeg, W, H, FTileBmpBytes)' in client
-assert 'FJpegImage.LoadFromStream(FJpegStream)' in client
+worker=(r/'client/kvm_video_worker.pas').read_text()
+assert 'DecodeIntoSurface' in worker
+assert 'FImage.LoadFromStream(FStream,FReader)' in worker
+assert 'DecodeToBmp(' not in client and 'TJPEGImage' not in client
 assert 'XShmGetImage' in x11 and 'XSync(D, 0); Result := Result and not TrapError;' in x11
 jpeg=(r/'tests/fixtures/turbo_5x3.jpg').read_bytes()
 assert jpeg.startswith(b'\xff\xd8') and jpeg.endswith(b'\xff\xd9')

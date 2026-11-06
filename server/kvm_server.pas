@@ -5,7 +5,7 @@ unit kvm_server;
 interface
 
 uses
-  Classes, SysUtils,
+  Classes, SysUtils, SyncObjs,
   mormot.core.base, mormot.net.http, mormot.net.server, mormot.net.ws.core,
   mormot.net.ws.server, kvm_wire, kvm_frame, kvm_flow,
   kvm_damage, kvm_turbojpeg, kvm_cli, kvm_adaptive, kvm_video, kvm_transport, kvm_extwire, kvm_security, kvm_metrics;
@@ -42,6 +42,7 @@ type
   private
     FSocket: TKvmWebSocketServer;
     FWorker: TCaptureThread;
+    FWakeCapture: TEvent;
     FMaxW, FMaxH: Integer;
     FAdaptive: Boolean;
     FCanH264: Boolean;
@@ -102,7 +103,7 @@ type
 
 implementation
 
-uses Math, kvm_desktop, kvm_codec, kvm_session_guard;
+uses Math, kvm_desktop, kvm_codec, kvm_session_guard, kvm_schedule;
 
 const
   // A dead network client may never deliver a WebSocket close notification.
@@ -124,104 +125,116 @@ procedure TCaptureThread.Execute;
 var
   Frame: TRgbFrame;
   Video: array[0..KVM_VIDEO_COUNT-1] of TKvmVideo;
-  Wanted: array[0..KVM_VIDEO_COUNT-1] of Boolean;
-  P, W, H, Q, FPS, CaptureW, CaptureH, CaptureRate, Interval: Integer;
-  Started, Measured: QWord;
-  GeometryChanged, CursorValid, AnyWanted, CaptureOpen, Captured: Boolean;
-  CX, CY: Word;
+  Wanted, Due, CacheValid: array[0..KVM_VIDEO_COUNT-1] of Boolean;
+  NextTick: array[0..KVM_VIDEO_COUNT-1] of QWord;
+  P,W,H,Q,FPS,CaptureW,CaptureH,CaptureRate: Integer;
+  Started,Measured,NowTick: QWord;
+  WaitMs: Cardinal;
+  GeometryChanged,CursorValid,AnyDue,CaptureOpen,Captured: Boolean;
+  CX,CY: Word;
 begin
-  for P := 0 to High(Video) do Video[P] := nil;
-  CaptureOpen := False;
-  Interval := Max(1, 1000 div FOwner.FFps);
+  for P:=0 to High(Video) do
+  begin Video[P]:=nil; CacheValid[P]:=False; NextTick[P]:=0; end;
+  CaptureOpen:=False; CX:=0; CY:=0; CursorValid:=False;
   try
     for P:=0 to High(Video) do
       if (P>=KVM_PROFILE_COUNT) and FOwner.FCanH264 then
       begin
-        ProfileSettings(P mod KVM_PROFILE_COUNT,FOwner.FMaxW,FOwner.FMaxH,FOwner.FQuality,FOwner.FFps,W,H,Q,FPS);
+        ProfileSettings(P mod KVM_PROFILE_COUNT,FOwner.FMaxW,FOwner.FMaxH,
+          FOwner.FQuality,FOwner.FFps,W,H,Q,FPS);
         Video[P]:=TKvmVideo.Create(FOwner.FEncoderName,FOwner.FGPUDevice,FPS,
           Max(128,FOwner.FBitrateKbps div (1 shl (P mod KVM_PROFILE_COUNT))));
       end
       else Video[P]:=TKvmVideo.Create;
     while not Terminated do
     begin
-      Started := GetTickCount64;
+      Started:=GetTickCount64;
       try
-        PollSessionGuard;
-        FOwner.FMetrics.Flush;
-        FOwner.ExpireIdleClients;
-        FOwner.CaptureDemand(Wanted, Started, CaptureW, CaptureH, CaptureRate);
-        if CaptureRate > 0 then ConfigureCaptureFPS(CaptureRate);
-        if (CaptureW = 0) and CaptureOpen then
-        begin CloseDesktopCapture; CaptureOpen := False; end;
-        AnyWanted := False;
-        for P := 0 to High(Wanted) do AnyWanted := AnyWanted or Wanted[P];
+        PollSessionGuard; FOwner.FMetrics.Flush; FOwner.ExpireIdleClients;
+        FOwner.CaptureDemand(Wanted,Started,CaptureW,CaptureH,CaptureRate);
+        if CaptureRate>0 then ConfigureCaptureFPS(CaptureRate);
+        if (CaptureW=0) and CaptureOpen then
+        begin CloseDesktopCapture; CaptureOpen:=False; end;
         FOwner.PublishDesktopState;
         if not DesktopCaptureAvailable then
         begin
           FOwner.SetDesktopAvailable(False);
-          // Do not discard a suspended SCStream: it may resume without
-          // reopening capture or triggering another permissions prompt.
+          for P:=0 to High(CacheValid) do begin CacheValid[P]:=False; NextTick[P]:=0; end;
           {$IFDEF WINDOWS}
-          if CaptureOpen then begin CloseDesktopCapture; CaptureOpen := False; end;
+          if CaptureOpen then begin CloseDesktopCapture; CaptureOpen:=False; end;
           {$ENDIF}
-          Sleep(50); Continue;
+          FOwner.FWakeCapture.WaitFor(50); Continue;
         end;
-        if AnyWanted then CaptureOpen := True;
-        Captured:=False;
-        if AnyWanted and (CaptureW>0) then
+        AnyDue:=False;
+        for P:=0 to High(Due) do
         begin
-          Measured:=GetTickCount64;
+          Due[P]:=Wanted[P] and (not CacheValid[P] or CaptureIsDue(Started,NextTick[P]));
+          AnyDue:=AnyDue or Due[P];
+        end;
+        if AnyDue and (CaptureW>0) then
+        begin
+          CaptureOpen:=True; Measured:=GetTickCount64;
           Captured:=CaptureDesktopRgb(CaptureW,CaptureH,Frame);
           FOwner.FMetrics.Capture(GetTickCount64-Measured,Captured);
-          PollSessionGuard;
-          Captured:=Captured and SessionGuardAllowsInput;
-        end;
-        if Captured then
-        begin
-          FOwner.SetDesktopAvailable(True);
-          CX := 0; CY := 0; CursorValid := False;
-          // Native cursor is composited by the backend. Send a crosshair
-          // only on X11 installations without the optional XFixes extension.
-          if not DesktopCursorEmbedded then CursorValid := GetCursorNormalized(CX, CY);
-          for P := 0 to High(Wanted) do if Wanted[P] and not Terminated then
+          PollSessionGuard; Captured:=Captured and SessionGuardAllowsInput;
+          if Captured then
           begin
-            ProfileSettings(P mod KVM_PROFILE_COUNT, FOwner.FMaxW, FOwner.FMaxH, FOwner.FQuality,
-              FOwner.FFps, W, H, Q, FPS);
-            Measured:=GetTickCount64;
-            Captured:=Video[P].Update(Frame,W,H,Q,GeometryChanged);
-            FOwner.FMetrics.Encode(GetTickCount64-Measured);
-            if Captured then
+            FOwner.SetDesktopAvailable(True);
+            CX:=0; CY:=0; CursorValid:=False;
+            if not DesktopCursorEmbedded then CursorValid:=GetCursorNormalized(CX,CY);
+            for P:=0 to High(Due) do if Due[P] and not Terminated then
             begin
-              PollSessionGuard;
-              if not SessionGuardAllowsInput then
-              begin FOwner.SetDesktopAvailable(False); Break; end;
+              ProfileSettings(P mod KVM_PROFILE_COUNT,FOwner.FMaxW,FOwner.FMaxH,
+                FOwner.FQuality,FOwner.FFps,W,H,Q,FPS);
+              Measured:=GetTickCount64;
+              CacheValid[P]:=Video[P].Update(Frame,W,H,Q,GeometryChanged);
+              FOwner.FMetrics.Encode(GetTickCount64-Measured);
+              NextTick[P]:=NextCaptureTick(Started,GetTickCount64,FPS);
               if GeometryChanged then FOwner.InvalidateSnapshots(P);
-              FOwner.DispatchBatches(P, Video[P].Cache, Video[P].Versions,
-                Video[P].Groups, Video[P].Width, Video[P].Height, CursorValid, CX, CY);
             end;
+          end
+          else
+          begin
+            FOwner.SetDesktopAvailable(False);
+            for P:=0 to High(CacheValid) do begin CacheValid[P]:=False; NextTick[P]:=0; end;
+            FOwner.FWakeCapture.WaitFor(50); Continue;
           end;
-        end
-        else if AnyWanted then
+        end;
+        // Drain cached rectangles after EACH ACK without waiting for the
+        // next capture deadline, and without re-capturing/re-encoding them.
+        // Stop-and-wait and bounded TryQueue are still enforced per client.
+        PollSessionGuard;
+        if not SessionGuardAllowsInput then
+        begin
           FOwner.SetDesktopAvailable(False);
+          for P:=0 to High(CacheValid) do CacheValid[P]:=False;
+        end
+        else for P:=0 to High(Video) do if CacheValid[P] and not Terminated then
+          FOwner.DispatchBatches(P,Video[P].Cache,Video[P].Versions,Video[P].Groups,
+            Video[P].Width,Video[P].Height,CursorValid,CX,CY);
       except
         on E: Exception do
         begin
           FOwner.SetDesktopAvailable(False);
-          WriteLn('[capture] ', E.ClassName, ': ', E.Message);
-          // Retry a failed native stream without spinning at 30 errors/s.
-          for P := 1 to 100 do begin if Terminated then Break; Sleep(10); end;
+          for P:=0 to High(CacheValid) do CacheValid[P]:=False;
+          WriteLn('[capture] ',E.ClassName,': ',E.Message);
+          // Bound retries, but wake promptly on shutdown.
+          for P:=1 to 20 do begin if Terminated then Break; FOwner.FWakeCapture.WaitFor(50); end;
         end;
       end;
-      while not Terminated and (GetTickCount64-Started<QWord(Interval)) do
-      begin
-        Sleep(3); PollSessionGuard;
-        if not SessionGuardAllowsInput then FOwner.SetDesktopAvailable(False);
-      end;
+      // Re-read after dispatch: usually the client now waits for an ACK.
+      // Auto-reset event avoids a lost wake-up between this query and wait.
+      NowTick:=GetTickCount64;
+      FOwner.CaptureDemand(Wanted,NowTick,CaptureW,CaptureH,CaptureRate);
+      WaitMs:=50;
+      for P:=0 to High(Wanted) do if Wanted[P] then
+        WaitMs:=Min(WaitMs,CaptureWaitMs(NowTick,NextTick[P],50));
+      if WaitMs=0 then WaitMs:=1;
+      FOwner.FWakeCapture.WaitFor(WaitMs);
     end;
   finally
-    // GDI DCs, SHM images and SCStreams are finalized by their owner thread.
     CloseDesktopCapture;
-    for P := 0 to High(Video) do Video[P].Free;
+    for P:=0 to High(Video) do Video[P].Free;
   end;
 end;
 
@@ -234,6 +247,7 @@ var
 begin
   inherited Create;
   InitCriticalSection(FLock);
+  FWakeCapture:=TEvent.Create(nil,False,False,'');
   FMetrics:=TKvmMetrics.Create(Options.MetricsCSV);
   FEncoderName:=Options.Encoder; FGPUDevice:=Options.GPUDevice; FBitrateKbps:=Options.BitrateKbps;
   FCanH264:=FEncoderName<>'turbojpeg';
@@ -280,6 +294,7 @@ begin
   if FWorker <> nil then
   begin
     FWorker.Terminate;
+    FWakeCapture.SetEvent;
     FWorker.WaitFor;
     FreeAndNil(FWorker);
   end;
@@ -296,6 +311,7 @@ begin
     LeaveCriticalSection(FLock);
   end;
   DoneCriticalSection(FLock);
+  FWakeCapture.Free;
   FMetrics.Free;
   inherited Destroy;
 end;
@@ -429,7 +445,8 @@ begin
       ProfileSettings(P, FMaxW, FMaxH, FQuality, FFps, W, H, Q, FPS);
       CaptureW := Max(CaptureW, W); CaptureH := Max(CaptureH, H);
       CaptureRate := Max(CaptureRate, FPS);
-      if not FClients[I].Flow.WaitingAck and (NowTick >= FClients[I].Adaptive.NextSendTick) then Wanted[P+Ord(FClients[I].H264)*KVM_PROFILE_COUNT] := True;
+      if not FClients[I].Flow.WaitingAck then
+        Wanted[P+Ord(FClients[I].H264)*KVM_PROFILE_COUNT] := True;
     end;
   finally LeaveCriticalSection(FLock); end;
 end;
@@ -474,12 +491,10 @@ begin
       NowTick := GetTickCount64;
       HasBatch := Index >= 0;
       if HasBatch then HasBatch := FDesktopAvailable and FClients[Index].Ready and
-        (FClients[Index].Adaptive.Profile+Ord(FClients[Index].H264)*KVM_PROFILE_COUNT = Profile) and
-        (NowTick >= FClients[Index].Adaptive.NextSendTick);
+        (FClients[Index].Adaptive.Profile+Ord(FClients[Index].H264)*KVM_PROFILE_COUNT = Profile);
       if HasBatch then
       begin
         ProfileSettings(Profile mod KVM_PROFILE_COUNT, FMaxW, FMaxH, FQuality, FFps, W, H, Q, FPS);
-        FClients[Index].Adaptive.NextSendTick := NowTick + QWord(Max(1, 1000 div FPS));
         HasBatch := PrepareFlowBatch(FClients[Index].Flow, Cache, Versions, Groups,
           CursorValid, CursorX, CursorY, NowTick, Batch,
           AdaptiveBudget(FClients[Index].Adaptive));
@@ -518,6 +533,7 @@ begin
   EnterCriticalSection(FLock);
   try I := FindClientLocked(ID); if I >= 0 then FClients[I].Ready := True;
   finally LeaveCriticalSection(FLock); end;
+  FWakeCapture.SetEvent;
 end;
 
 procedure TKvmServer.NackBatch(ID: THttpServerConnectionID; Serial: Cardinal);
@@ -539,6 +555,7 @@ begin
     WriteLn('[video] NACK client ',ID,' lot ',Serial,
       ' rejets consecutifs=',Rejects,' fermeture=',Close);
   if Close then FSocket.AbortConnection(ID);
+  FWakeCapture.SetEvent;
 end;
 
 procedure TKvmServer.AckBatch(ID: THttpServerConnectionID; Serial: Cardinal);
@@ -562,6 +579,7 @@ begin
       end;
     end;
   finally LeaveCriticalSection(FLock); end;
+  FWakeCapture.SetEvent;
 end;
 
 procedure TKvmServer.InvalidateSnapshots(Profile: Integer);
@@ -589,6 +607,7 @@ begin
   finally
     LeaveCriticalSection(FLock);
   end;
+  FWakeCapture.SetEvent;
 end;
 
 function TKvmServer.AddClient(ID: THttpServerConnectionID; CanControl,H264: Boolean): Boolean;

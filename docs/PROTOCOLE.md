@@ -45,7 +45,7 @@ reprise implicite du controle. **D reste ordonne avec les images et B** ; il n'e
 pas traite en avance comme un simple label. Un D isole ne demande pas d'ACK.
 
 JPEG : rectangles fusionnes issus d'une grille 256 pixels, limites heritees
-512x512 et 2 Mio par JPEG (TurboJPEG 4:4:4). En-tetes de taille controles avant decodage LCL.
+512x512 et 2 Mio par JPEG (TurboJPEG 4:4:4). En-tetes de taille controles avant decodage dans le worker CPU.
 H.264 : dimensions paires, un access unit <=2 Mio, avec SPS/PPS/IDR autonome ;
 pas d'image P/B faisant reference a un lot precedent. Les conversions AVCC/Annex-B
 sont bornees. Le scan de NAL n'est pas une validation semantique H.264 : celle-ci
@@ -131,3 +131,10 @@ rafale puis 32768/s. Trois commandes malformees ferment le pair. Les droits sont
 verifies au serveur et ne dependent pas d'une case du client. Une permission OS,
 une session ou un contexte d'entree peut changer entre deux sondes : ce protocole
 ne rend pas les API graphiques atomiques avec le verrouillage du bureau.
+
+## Mise a jour P1/P2 - sans changement du format meshkvm7
+
+A est emis apres composition du lot dans le framebuffer CPU du worker,
+independamment de la peinture LCL. Les presentations peuvent etre coalescees,
+jamais les deltas non appliques. Le serveur garde un lot en vol par client.
+D/I conservent leur ordre ; une pause publie une surface vide. Voir P1_P2_P3.md.

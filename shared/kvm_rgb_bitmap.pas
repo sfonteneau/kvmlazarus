@@ -26,7 +26,10 @@ begin
     Src:=1+Y*Frame.Width*3; Dst:=55+(Frame.Height-1-Y)*Stride;
     for X:=0 to Frame.Width-1 do
     begin
-      Result[Dst]:=Frame.RGB[Src+2]; Result[Dst+1]:=Frame.RGB[Src+1]; Result[Dst+2]:=Frame.RGB[Src];
+      if Frame.Order=kpoBGR then
+      begin Result[Dst]:=Frame.RGB[Src]; Result[Dst+2]:=Frame.RGB[Src+2]; end
+      else begin Result[Dst]:=Frame.RGB[Src+2]; Result[Dst+2]:=Frame.RGB[Src]; end;
+      Result[Dst+1]:=Frame.RGB[Src+1];
       Inc(Src,3); Inc(Dst,3);
     end;
   end;

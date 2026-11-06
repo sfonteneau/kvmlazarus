@@ -3,14 +3,13 @@ unit kvm_turbojpeg_decode;
 {$mode objfpc}{$H+}
 {$I ../shared/kvm_build.inc}
 
-// Optional libjpeg-turbo fast path for Lazarus clients.
-// The decoder writes a bottom-up BGR24 BMP into a reusable bounded buffer.
-// TBitmap.LoadFromStream imports that BMP on the LCL/main thread; no LCL
-// object is accessed from the WebSocket callback thread.
+// TurboJPEG worker decoder: direct CPU BGRX32 rectangle composition.
+// Legacy BGR24/BMP helpers remain for existing tests, not the UI hot path.
+// No LCL object is accessed by this unit.
 
 interface
 
-uses SysUtils, Dynlibs, ctypes;
+uses SysUtils, Dynlibs, ctypes, kvm_surface;
 
 type
   TKvmTurboJpegDecoder = class
@@ -27,6 +26,8 @@ type
     constructor Create;
     destructor Destroy; override;
     function Available: Boolean;
+    function DecodeIntoSurface(const JPEG: RawByteString; X,Y,W,H: Integer;
+      var Surface: TKvmSurface): Boolean;
     function DecodeToBgr(const JPEG: RawByteString; W, H: Integer;
       var BGR: RawByteString): Boolean;
     function DecodeToBmp(const JPEG: RawByteString; W, H: Integer;
@@ -117,9 +118,29 @@ begin
   Result := FHandle <> nil;
 end;
 
-// TurboJPEG decompresses directly into a top-to-bottom, DWORD-aligned
-// BGR24 buffer. This avoids encoding a BMP file and decoding it again in LCL.
-// Caller owns and may reuse BGR; no pointer is retained by TurboJPEG.
+// A handle is used by ONE decode worker. The destination is CPU memory.
+// Preserve published snapshots using copy-on-write before modifying pixels.
+function TKvmTurboJpegDecoder.DecodeIntoSurface(const JPEG: RawByteString;
+  X,Y,W,H: Integer; var Surface: TKvmSurface): Boolean;
+const TJPF_BGRX = 3;
+var ActualW,ActualH,Subsamp,CS: CInt; Offset: PtrUInt;
+begin
+  Result:=False;
+  if not Available or not SurfaceValid(Surface) or
+    (Length(JPEG)<4) or (Length(JPEG)>KVM_MAX_JPEG_BYTES) or
+    (X<0) or (Y<0) or (W<1) or (H<1) or
+    (W>KVM_MAX_RECT_WIDTH) or (H>KVM_MAX_RECT_HEIGHT) or
+    (Int64(X)+W>Surface.Width) or (Int64(Y)+H>Surface.Height) then Exit;
+  if FHeader(FHandle,PByte(Pointer(JPEG)),CULong(Length(JPEG)),
+    ActualW,ActualH,Subsamp,CS)<>0 then Exit;
+  if (ActualW<>W) or (ActualH<>H) then Exit;
+  UniqueString(Surface.Pixels);
+  Offset:=PtrUInt(Y*Surface.Width+X)*4;
+  Result:=FDecompress(FHandle,PByte(Pointer(JPEG)),CULong(Length(JPEG)),
+    PByte(PtrUInt(Pointer(Surface.Pixels))+Offset),W,Surface.Width*4,H,
+    TJPF_BGRX,0)=0;
+end;
+
 function TKvmTurboJpegDecoder.DecodeToBgr(const JPEG: RawByteString;
   W, H: Integer; var BGR: RawByteString): Boolean;
 var

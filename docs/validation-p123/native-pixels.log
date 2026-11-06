@@ -1,0 +1,1 @@
+PASS: actual C converter: 20000 valid crop/rotation/stride/scale cases + 100000 bounded malformed + 20 targeted native-size cases

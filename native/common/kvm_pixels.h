@@ -35,6 +35,19 @@ static inline int kvm_pixels_rgb(const uint8_t *src, size_t size,
     } else {
         if (span > size-offset || (uint64_t)sw*4 > size-offset-span) return 0;
     }
+    if (rotation == 0 && dw == cw && dh == ch) {
+        const unsigned r = rgb_order ? 0u : 2u, b = rgb_order ? 2u : 0u;
+        for (y=0; y<dh; ++y) {
+            const uint8_t *p=src+(size_t)((int64_t)offset+
+                (int64_t)(y+cy)*stride+(int64_t)cx*4);
+            uint8_t *q=dst+(size_t)y*dw*3;
+            /* No per-pixel divisions, coordinate transforms or branches. */
+            for (x=0; x<dw; ++x, p+=4, q+=3) {
+                q[0]=p[r]; q[1]=p[1]; q[2]=p[b];
+            }
+        }
+        return 1;
+    }
     rw = (rotation & 1) ? ch : cw; rh = (rotation & 1) ? cw : ch;
     for (y=0; y<dh; ++y) {
         uint32_t ry = (uint32_t)((uint64_t)y*rh/dh);

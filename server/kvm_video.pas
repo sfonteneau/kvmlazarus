@@ -161,6 +161,7 @@ begin
       FFrame.RGB[B+2]:=Source.RGB[A+2];
     end;
   end;
+  FFrame.Order := Source.Order;
   GeometryChanged:=(Width<>W) or (Height<>H);
   if GeometryChanged then
   begin
@@ -188,7 +189,8 @@ begin
       if FH264=nil then raise Exception.Create(LastError);
     end;
   end;
-  Changed:=(Length(FPrevious.RGB)<>Length(FFrame.RGB)) or (Cache[0]='');
+  Changed:=(FPrevious.Order<>FFrame.Order) or
+    (Length(FPrevious.RGB)<>Length(FFrame.RGB)) or (Cache[0]='');
   if not Changed then Changed:=not CompareMem(Pointer(FPrevious.RGB),Pointer(FFrame.RGB),Length(FFrame.RGB));
   if Changed then
   begin

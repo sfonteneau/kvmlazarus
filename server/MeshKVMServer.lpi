@@ -119,6 +119,10 @@
         <Filename Value="../shared/kvm_codec.pas" />
         <IsPartOfProject Value="True" />
       </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_schedule.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

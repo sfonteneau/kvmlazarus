@@ -1,3 +1,20 @@
+# MeshKVM v9 - P1 / P2 / P3 (sources)
+
+Base : `kvmlazarus-main.zip` fourni dans la conversation.
+Decodage hors GUI, ACK apres composition CPU, envoi du cache independant de la
+capture, GDI BGR24 et rendu DIB Windows. Protocole meshkvm7 conserve.
+
+**Recompiler serveur ET client avec le script autonome habituel.** Les scripts
+x86/x64 et les sources externes mORMot2 ne sont pas modifies. La compilation des
+applications n'a pas ete executee ici : voir les limites avant utilisation.
+
+- Guide et commandes : [docs/P1_P2_P3.md](docs/P1_P2_P3.md).
+- Validation de cette passe : [docs/VALIDATION_P123.md](docs/VALIDATION_P123.md).
+- Tests Pascal : `python tests/run_p123_tests.py --help`.
+- Les anciens rapports ci-dessous sont historiques.
+
+---
+
 # MeshKVM v9 - autonome avec choix Windows x86 / x64
 
 Base de ce correctif: `MeshKVM_v9_autonome_sources.zip`.

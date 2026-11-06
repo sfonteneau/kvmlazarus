@@ -76,6 +76,18 @@
         <Filename Value="../shared/kvm_tls_policy.pas" />
         <IsPartOfProject Value="True" />
       </Unit>
+      <Unit>
+        <Filename Value="kvm_video_worker.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="kvm_present_win.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_surface.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

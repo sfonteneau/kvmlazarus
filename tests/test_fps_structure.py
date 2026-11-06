@@ -11,8 +11,11 @@ assert 'KVM_BATCH_MAX_TILES = 20;' in flow
 assert 'KVM_OUTGOING_MAX_FRAMES = 64' in transport
 assert 'KVM_OUTGOING_MAX_BYTES = 4 * 1024 * 1024' in transport
 assert 'KVM_BATCH_MAX_BYTES = 3 * 1024 * 1024' in flow
-assert 'if Ready then N := Min(Total, 24) else N := 0;' in client
-assert 'FJpegImage.LoadFromStream(FJpegStream)' in client
+worker=(root/'client/kvm_video_worker.pas').read_text()
+assert 'FDecoder.DrainUI' in client
+assert 'FImage.LoadFromStream(FStream,FReader)' in worker
+assert 'DecodeTile(' not in client
+assert 'KVM_DECODE_QUEUE_PACKETS = 128' in worker
 assert 'SrcLine[2]' in x11 and '(W = M.Bounds.W)' in x11
 assert 'if S.BytesPerSecond = 0 then Exit(1024 * 1024);' in adaptive
 print('PASS: static bounds and optimized code paths (no runtime / FPS measurement)')

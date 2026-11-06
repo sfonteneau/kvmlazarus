@@ -43,7 +43,8 @@ var
   Row, Offset, ByteCount: Integer;
 begin
   Result := True;
-  if (Current.Width <> Previous.Width) or
+  if (Current.Order <> Previous.Order) or
+     (Current.Width <> Previous.Width) or
      (Current.Height <> Previous.Height) or
      (Length(Current.RGB) <> Length(Previous.RGB)) or
      (Current.Width < 1) or (Current.Height < 1) or
@@ -68,6 +69,7 @@ begin
     raise Exception.Create('Tampon source RGB incomplet.');
   if not AllocateFrame(Target, Source.Width, Source.Height) then
     raise Exception.Create('Dimensions de capture non valides.');
+  Target.Order := Source.Order;
   if Length(Source.RGB) > 0 then
     Move(Source.RGB[1], Target.RGB[1], Length(Source.RGB));
 end;
@@ -81,7 +83,8 @@ begin
      (Length(Source.RGB) <> Int64(Source.Width) * Source.Height * 3) then
     raise Exception.Create('Source RGB invalide pour le cache partiel.');
   // First capture / resolution change must populate every pixel.
-  if (Target.Width <> Source.Width) or (Target.Height <> Source.Height) or
+  if (Target.Order <> Source.Order) or
+     (Target.Width <> Source.Width) or (Target.Height <> Source.Height) or
      (Length(Target.RGB) <> Length(Source.RGB)) then
   begin
     CopyFrameReuse(Source, Target);

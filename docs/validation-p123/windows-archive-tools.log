@@ -1,0 +1,9 @@
++ ar s '/tmp/kvm group regression 2_awtm34/libkvm_wincrt.a'
++ ar t '/tmp/kvm group regression 2_awtm34/libkvm_wincrt.a'
+..+ ar s /tmp/tmpvplkst09/libkvm_wincrt.a
++ ar t /tmp/tmpvplkst09/libkvm_wincrt.a
+.
+----------------------------------------------------------------------
+Ran 3 tests in 0.153s
+
+OK

@@ -55,6 +55,34 @@ static void malformed_cases(void) {
     assert(!kvm_pixels_rgb(src,SIZE_MAX,SIZE_MAX-1,INT32_MIN,1,1,0,0,1,1,0,0,dst,256,1,1));
     assert(!kvm_dimensions(8192,8192)); assert(kvm_dimensions(8192,2048));
 }
+/* Explicit native-size path coverage: padded rows, crop, both channel
+ * orders and both stride signs, including a large desktop-like rectangle. */
+static void native_size_cases(void) {
+    const unsigned sizes[][2]={{1,1},{5,3},{33,17},{513,257},{1920,1080}};
+    unsigned z,reverse,order,x,y;
+    for(z=0;z<sizeof(sizes)/sizeof(sizes[0]);++z)
+    for(reverse=0;reverse<2;++reverse) for(order=0;order<2;++order) {
+        unsigned w=sizes[z][0],h=sizes[z][1],sw=w+2,sh=h+2,stride=sw*4+11;
+        size_t size=(size_t)stride*sh,cap=(size_t)w*h*3;
+        uint8_t *src=malloc(size),*dst=malloc(cap+2);
+        size_t off=reverse?(size_t)(sh-1)*stride:0;
+        assert(src && dst); memset(src,0xcc,size); memset(dst,0xa7,cap+2);
+        for(y=0;y<sh;++y) for(x=0;x<sw;++x) {
+            uint8_t *p=src+(reverse?sh-1-y:y)*stride+x*4;
+            p[0]=(uint8_t)x; p[1]=(uint8_t)y; p[2]=(uint8_t)(x+y*3);
+        }
+        assert(kvm_pixels_rgb(src,size,off,reverse?-(int32_t)stride:(int32_t)stride,
+            sw,sh,1,1,w,h,0,order,dst+1,cap,w,h));
+        for(y=0;y<h;++y) for(x=0;x<w;++x) {
+            uint8_t *p=dst+1+((size_t)y*w+x)*3;
+            assert(p[0]==(uint8_t)(order?x+1:x+1+(y+1)*3));
+            assert(p[1]==(uint8_t)(y+1));
+            assert(p[2]==(uint8_t)(order?x+1+(y+1)*3:x+1));
+        }
+        assert(dst[0]==0xa7 && dst[cap+1]==0xa7);
+        free(src); free(dst);
+    }
+}
 int main(void) {
     uint8_t sample[24]={0},out[18]={0};
     const uint8_t expect[4][6]={{1,2,3,4,5,6},{4,1,5,2,6,3},{6,5,4,3,2,1},{3,6,2,5,1,4}};
@@ -64,7 +92,7 @@ int main(void) {
         assert(kvm_pixels_rgb(sample,24,0,12,3,2,0,0,3,2,r,0,out,18,(r&1)?2:3,(r&1)?3:2));
         for(i=0;i<6;i++) assert(out[i*3]==expect[r][i]);
     }
-    valid_cases();malformed_cases();
-    puts("PASS: actual C converter: 20000 valid crop/rotation/stride/scale cases + 100000 bounded malformed cases");
+    valid_cases();malformed_cases();native_size_cases();
+    puts("PASS: actual C converter: 20000 valid crop/rotation/stride/scale cases + 100000 bounded malformed + 20 targeted native-size cases");
     return 0;
 }

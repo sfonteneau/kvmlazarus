@@ -1,0 +1,8 @@
+System: Linux-6.18.57-x86_64-with-glibc2.41
+gcc: /usr/bin/gcc
+clang: /usr/local/swift/usr/bin/clang
+fpc: None
+ppcx64: None
+lazbuild: None
+wine: None
+i686-w64-mingw32-gcc: None

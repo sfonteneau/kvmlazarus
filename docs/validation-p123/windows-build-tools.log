@@ -1,0 +1,33 @@
++ clang -target i686-w64-windows-gnu -O2 -c /tmp/tmpi1bqd6_1/fixture.c -o /tmp/tmpi1bqd6_1/i386.o
++ llvm-ar rcs /tmp/tmpi1bqd6_1/i386.a /tmp/tmpi1bqd6_1/i386.o
++ nm -g /tmp/tmpi1bqd6_1/i386.a
++ objdump -f /tmp/tmpi1bqd6_1/i386.a
++ objdump -f /tmp/tmpi1bqd6_1/i386.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x86 /out:/tmp/tmpi1bqd6_1/i386.exe /tmp/tmpi1bqd6_1/i386.o
+REAL COFF/PE fixture checked, NOT executed: i386
++ clang -target x86_64-w64-windows-gnu -O2 -c /tmp/tmpi1bqd6_1/fixture.c -o /tmp/tmpi1bqd6_1/x86_64.o
++ llvm-ar rcs /tmp/tmpi1bqd6_1/x86_64.a /tmp/tmpi1bqd6_1/x86_64.o
++ nm -g /tmp/tmpi1bqd6_1/x86_64.a
++ objdump -f /tmp/tmpi1bqd6_1/x86_64.a
++ objdump -f /tmp/tmpi1bqd6_1/x86_64.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x64 /out:/tmp/tmpi1bqd6_1/x86_64.exe /tmp/tmpi1bqd6_1/x86_64.o
+....REAL COFF/PE fixture checked, NOT executed: x86_64
+Cible demandee: i386-win32 (--arch x86)
+......FPC, GCC et linker PE annoncent la cible demandee; ar/nm/objdump trouves.
+Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.
+Cible demandee: i386-win32 (--arch x86)
+
+Termine: executables dans /tmp/meshkvm arch r5ujungt/dist/i386-win32
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.
+Cible demandee: x86_64-win64 (--arch x64)
+...........
+Termine: executables dans /tmp/meshkvm arch r5ujungt/dist/x86_64-win64
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.
+Cible demandee: i386-win32 (--arch x86)
+..........
+----------------------------------------------------------------------
+Ran 31 tests in 1.061s
+
+OK
+FPC, GCC et linker PE annoncent la cible demandee; ar/nm/objdump trouves.
+Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.

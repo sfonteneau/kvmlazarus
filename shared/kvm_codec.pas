@@ -7,6 +7,7 @@ function CodecAvailable(out Reason: string): Boolean;
 type
   TKvmH264Encoder = class
   private FHandle: Pointer;
+    FRgbScratch: RawByteString;
   public
     constructor Create(const Name, Device: string; W,H,FPS,Kbps: Integer);
     destructor Destroy; override;
@@ -93,11 +94,26 @@ destructor TKvmH264Encoder.Destroy;
 begin if FHandle<>nil then EncoderClose(FHandle); inherited Destroy; end;
 function TKvmH264Encoder.Encode(const Frame: TRgbFrame; out Data: RawByteString; out Reason: string): Boolean;
 var N: csize_t; Error: array[0..511] of AnsiChar;
+    I: Integer; Pixels: Pointer;
 begin
   Data:=''; Reason:=''; Result:=False;
   if (Frame.Width<2) or (Frame.Height<2) or (Length(Frame.RGB)<>Int64(Frame.Width)*Frame.Height*3) then Exit;
   SetLength(Data,KVM_MAX_VIDEO_BYTES); N:=0; FillChar(Error,SizeOf(Error),0);
-  Result:=EncodeProc(FHandle,Pointer(Frame.RGB),Length(Frame.RGB),Pointer(Data),Length(Data),@N,@Error[0],SizeOf(Error))=0;
+  Pixels := Pointer(Frame.RGB);
+  if Frame.Order = kpoBGR then
+  begin
+    SetLength(FRgbScratch, Length(Frame.RGB));
+    I := 1;
+    while I <= Length(Frame.RGB) do
+    begin
+      FRgbScratch[I] := Frame.RGB[I+2];
+      FRgbScratch[I+1] := Frame.RGB[I+1];
+      FRgbScratch[I+2] := Frame.RGB[I];
+      Inc(I, 3);
+    end;
+    Pixels := Pointer(FRgbScratch);
+  end;
+  Result:=EncodeProc(FHandle,Pixels,Length(Frame.RGB),Pointer(Data),Length(Data),@N,@Error[0],SizeOf(Error))=0;
   Result:=Result and (N>0) and (N<=csize_t(Length(Data)));
   if Result then SetLength(Data,N)
   else begin Data:=''; Reason:=string(PAnsiChar(@Error[0])); end;
