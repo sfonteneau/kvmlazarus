@@ -1,3 +1,5 @@
+**Client GUI sans console :** les traces `client-video` et `client-ws` sont maintenant enregistrees dans un fichier utilisateur, voir [CLIENT_JOURNAL_GUI.md](docs/CLIENT_JOURNAL_GUI.md).
+
 **Fluidite v9 :** voir [FPS_V9_OPTIMISATION.md](docs/FPS_V9_OPTIMISATION.md) pour les optimisations X11, JPEG et les nouvelles mesures de debit.
 
 ## Client : commandes escamotables (v9 UI)

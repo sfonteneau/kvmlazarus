@@ -34,6 +34,10 @@
         <IsPartOfProject Value="True" />
       </Unit>
       <Unit>
+        <Filename Value="kvm_client_log.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
         <Filename Value="../shared/kvm_cli.pas" />
       </Unit>
       <Unit>

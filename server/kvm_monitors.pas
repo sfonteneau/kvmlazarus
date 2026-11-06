@@ -32,6 +32,12 @@ type
   TKvmMonitorInfo = record Size: DWORD; Monitor, Work: TRect; Flags: DWORD;
     Device: array[0..31] of WideChar; end;
   PMonitorArray = ^TKvmMonitors;
+  // Explicit Win32 ABI import: some FPC Windows units do not expose this symbol.
+  TKvmMonitorEnumProc = function(M: HMONITOR; DC: HDC;
+    R: PRect; User: LPARAM): BOOL; stdcall;
+function NativeEnumDisplayMonitors(DC: HDC; Clip: PRect;
+  Callback: TKvmMonitorEnumProc; User: LPARAM): BOOL;
+  stdcall; external 'user32.dll' name 'EnumDisplayMonitors';
 function NativeMonitorInfo(M: HMONITOR; Info: Pointer): LongBool;
   stdcall; external 'user32.dll' name 'GetMonitorInfoW';
 function EnumOne(M: HMONITOR; DC: HDC; R: PRect; User: LPARAM): BOOL; stdcall;
@@ -89,7 +95,7 @@ begin
   Result[0].Bounds.W := GetSystemMetrics(SM_CXVIRTUALSCREEN);
   Result[0].Bounds.H := GetSystemMetrics(SM_CYVIRTUALSCREEN);
   Result[0].PixelW := Result[0].Bounds.W; Result[0].PixelH := Result[0].Bounds.H;
-  EnumDisplayMonitors(0, nil, @EnumOne, LPARAM(@Result));
+  NativeEnumDisplayMonitors(0, nil, @EnumOne, LPARAM(@Result));
   {$ENDIF}
   {$IFDEF LINUX}
   D := LockX11;

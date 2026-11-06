@@ -52,7 +52,7 @@ begin
   end;
   if Flags <> 0 then
   begin
-    FillChar(TI,SizeOf(TI),0); TI.Itype := INPUT_MOUSE; TI.mi.dwFlags := Flags;
+    FillChar(TI,SizeOf(TI),0); TI._Type := INPUT_MOUSE; TI.mi.dwFlags := Flags;
     if KvmSendInput(1,@TI,SizeOf(TI)) <> 1 then
       raise Exception.Create('Windows refuse le bouton de souris.');
   end;
@@ -84,7 +84,7 @@ begin
   begin
     FillChar(TI, SizeOf(TI), 0);
     FillChar(KI, SizeOf(KI), 0);
-    TI.Itype := INPUT_KEYBOARD;
+    TI._Type := INPUT_KEYBOARD;
     KI.wScan := Codes[I];
     KI.dwFlags := KVM_UNICODE_FLAG;
     TI.ki := KI;
@@ -101,7 +101,7 @@ procedure InjectKey(Pressed: Boolean; VKey: Word);
 var TI: TInput;
 begin
   if VKey > 255 then Exit;
-  FillChar(TI, SizeOf(TI), 0); TI.Itype := INPUT_KEYBOARD;
+  FillChar(TI, SizeOf(TI), 0); TI._Type := INPUT_KEYBOARD;
   TI.ki.wVk := VKey; TI.ki.wScan := Word(MapVirtualKey(VKey, 0));
   if VKey in [$21..$28, $2d, $2e, $5b, $5c, $5d, $6f, $90, $a3, $a5] then
     TI.ki.dwFlags := KEYEVENTF_EXTENDEDKEY;
@@ -114,7 +114,7 @@ procedure InjectWheel(Notches: SmallInt);
 var TI: TInput;
 begin
   if Notches = 0 then Exit;
-  FillChar(TI,SizeOf(TI),0); TI.Itype := INPUT_MOUSE;
+  FillChar(TI,SizeOf(TI),0); TI._Type := INPUT_MOUSE;
   TI.mi.dwFlags := MOUSEEVENTF_WHEEL;
   TI.mi.mouseData := DWORD(LongInt(Notches) * WHEEL_DELTA);
   if KvmSendInput(1,@TI,SizeOf(TI)) <> 1 then

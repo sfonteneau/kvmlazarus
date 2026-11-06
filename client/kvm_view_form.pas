@@ -11,7 +11,7 @@ uses
   mormot.net.ws.core, mormot.net.ws.client,
   kvm_wire, kvm_cli, kvm_jpeg_guard, kvm_extwire, kvm_codec, kvm_frame,
   kvm_rgb_bitmap, kvm_input_queue, kvm_security, kvm_tls_policy,
-  kvm_turbojpeg_decode;
+  kvm_turbojpeg_decode, kvm_client_log;
 
 type
   TKvmViewForm = class(TForm)
@@ -151,9 +151,9 @@ begin
   FNativeDecodeMs := 0; FRawImportMs := 0; FBlitMs := 0;
   FRawTiles := 0; FPaintMs := 0; FPaintCount := 0;
   if FTurboDecoder.Available then
-    WriteLn('[client-video] TurboJPEG natif disponible pour le decodage')
+    KvmClientLog('[client-video] TurboJPEG natif disponible pour le decodage')
   else
-    WriteLn('[client-video] TurboJPEG absent : repli sur TJPEGImage LCL');
+    KvmClientLog('[client-video] TurboJPEG absent : repli sur TJPEGImage LCL');
   FStatsTick := GetTickCount64;
   FDecodeMs := 0; FDecodedTiles := 0; FAckedBatches := 0;
   FTurboTiles := 0; FFallbackTiles := 0;
@@ -322,9 +322,11 @@ end;
 procedure TKvmViewForm.SetStatus(const TextA: string);
 begin
   // Le panneau est cache pendant la session : le statut reste lisible dans le titre.
+  if FStatus.Caption <> TextA then
+    KvmClientLog('[client-status] ' + TextA);
   Caption := 'MeshKVM | ' + Copy(TextA, 1, 90) + ' | F8 : commandes';
   FStatus.Caption := TextA;
-  FStatus.Hint := TextA;
+  FStatus.Hint := TextA + LineEnding + 'Journal : ' + KvmClientLogPath;
   FStatus.ShowHint := True;
 end;
 
@@ -811,9 +813,7 @@ begin
             (TextMsg = 'ERR PROTOCOL') or (Copy(TextMsg,1,15) = 'LOCAL PROTOCOL:') then
     begin
       // Keep the diagnostic after CloseSocket(), which resets all GUI state.
-      {$IFDEF UNIX}
-      WriteLn('[client-ws] ',TextMsg);
-      {$ENDIF}
+      KvmClientLog('[client-ws] ' + TextMsg);
       CloseSocket;
       if TextMsg = 'ERR AUTH' then
         SetStatus('Authentification refusee')
@@ -942,17 +942,17 @@ begin
     if NowTick - FStatsTick >= 5000 then
     begin
       // ACK/s is not FPS: a full snapshot may require multiple batches.
-      WriteLn('[client-video] ACK/s=',
-        FormatFloat('0.0', FAckedBatches * 1000.0 / (NowTick-FStatsTick)),
-        ' JPEG/s=', FormatFloat('0.0', FDecodedTiles * 1000.0 / (NowTick-FStatsTick)),
-        ' traitement total ms=', FDecodeMs,
-        ' decomp. native ms=', FNativeDecodeMs,
-        ' import LCL ms=', FRawImportMs,
-        ' dessin ms=', FBlitMs,
-        ' PaintBox ms=', FPaintMs,
-        ' PaintBox/s=', FormatFloat('0.0', FPaintCount * 1000.0 / (NowTick-FStatsTick)),
-        ' JPEG direct=', FRawTiles,
-        ' TurboJPEG=', FTurboTiles, ' LCL=', FFallbackTiles);
+      KvmClientLog('[client-video] ACK/s=' +
+        FormatFloat('0.0', FAckedBatches * 1000.0 / (NowTick-FStatsTick)) +
+        ' JPEG/s=' + FormatFloat('0.0', FDecodedTiles * 1000.0 / (NowTick-FStatsTick)) +
+        ' traitement total ms=' + IntToStr(Int64(FDecodeMs)) +
+        ' decomp. native ms=' + IntToStr(Int64(FNativeDecodeMs)) +
+        ' import LCL ms=' + IntToStr(Int64(FRawImportMs)) +
+        ' dessin ms=' + IntToStr(Int64(FBlitMs)) +
+        ' PaintBox ms=' + IntToStr(Int64(FPaintMs)) +
+        ' PaintBox/s=' + FormatFloat('0.0', FPaintCount * 1000.0 / (NowTick-FStatsTick)) +
+        ' JPEG direct=' + IntToStr(FRawTiles) +
+        ' TurboJPEG=' + IntToStr(FTurboTiles) + ' LCL=' + IntToStr(FFallbackTiles));
       FStatsTick := NowTick;
       FDecodeMs := 0; FDecodedTiles := 0; FAckedBatches := 0;
       FTurboTiles := 0; FFallbackTiles := 0;
@@ -1077,10 +1077,8 @@ begin
             // Some older LCL widgetsets have incomplete RawImage import.
             // Disable this fast path for the rest of the session.
             FUseRawImage := False;
-            {$IFDEF UNIX}
-            WriteLn('[client-video] import RawImage non pris en charge : ',
-              E.Message, ' ; repli sur BMP');
-            {$ENDIF}
+            KvmClientLog('[client-video] import RawImage non pris en charge : ' +
+              E.Message + ' ; repli sur BMP');
           end;
         end;
       end;
