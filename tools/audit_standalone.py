@@ -59,6 +59,15 @@ def violations(kind: str, deps: list[str]) -> list[str]:
                 bad.append(dependency+' (DLL hors liste systeme)')
     return bad
 
+def invalid_imports(kind: str, details: str) -> list[str]:
+    # Check imported *symbols* as well as DLL names. The upstream mORMot2
+    # source has declared MsiEnumProductA (missing the final 's'), which
+    # causes a load-time error despite importing only the system msi.dll.
+    if kind == 'PE' and re.search(r'(?<![A-Za-z0-9_])MsiEnumProductA(?![A-Za-z0-9_])', details):
+        return ['MsiEnumProductA : entree MSI inexistante (corriger mormot.lib.sspi.pas)']
+    return []
+
+
 def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('binary',type=Path)
@@ -67,7 +76,7 @@ def main() -> int:
     p.add_argument('--verbose', action='store_true', help='Afficher aussi la sortie complete de objdump/readelf/otool')
     args=p.parse_args()
     kind,deps,data=inspect(args.binary,args.objdump)
-    bad=violations(kind,deps)
+    bad=violations(kind,deps)+invalid_imports(kind,data)
     lines=['Executable: '+str(args.binary),'Format: '+kind,
       'Dependances directes:']+['  '+d for d in dict.fromkeys(deps)]
     lines+=['RESULTAT: '+('ECHEC: '+', '.join(bad) if bad else 'aucune dependance directe privee MeshKVM/TurboJPEG detectee'),

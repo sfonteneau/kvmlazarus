@@ -50,6 +50,33 @@ def run(argv: list[str | Path], *, capture: bool = False, cwd: Path | None = Non
         raise BuildError(f'Command failed ({p.returncode}): {display}\n{p.stdout or ""}')
     return (p.stdout or '').strip()
 
+def require_mormot_fixer_check(fixer: Path) -> None:
+    """Fail clearly if a partial update left the old mORMot MSI helper in place.
+
+    The --check API was added after the original patch helper. Older partial
+    ZIPs updated the builder only, so their users got an argparse error here.
+    """
+    if not fixer.is_file():
+        raise BuildError('Outil mORMot2 introuvable: '+str(fixer)+
+                         '. Installer le correctif contenant build/ et tools/.')
+    usage=run([sys.executable,fixer,'--help'],capture=True)
+    if '--check' not in usage:
+        raise BuildError('Versions incompatibles des scripts MeshKVM: '+str(fixer)+
+                         ' ne reconnait pas --check. Extraire le correctif COMPLET '
+                         '(build/build_standalone.py ET tools/fix_mormot_msi_import.py).')
+
+
+def register_lazarus_package_link(lazbuild: str, package: Path) -> None:
+    """Register the exact .lpk source tree using lazbuild's *flag + file* syntax.
+
+    Lazarus 4.8 handles --add-package-link as a flag and reads .lpk paths
+    from positional arguments.  Passing '--add-package-link=<path>' (or a
+    combined '--add-package-link <path>' string) causes 'Invalid option'.
+    Let subprocess quote each argument separately on Windows.
+    """
+    run([lazbuild, '--add-package-link', package])
+
+
 def tool(name: str) -> str:
     p = shutil.which(name)
     if not p:
@@ -438,7 +465,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--nm', default=None)
     parser.add_argument('--objdump', default=None, help='PE/archive inspector from the selected MinGW SDK')
     parser.add_argument('--widgetset', default=None)
-    parser.add_argument('--mormot-dir', type=Path, default=os.environ.get('MORMOT2_DIR'))
+    parser.add_argument('--mormot-dir', type=Path, default=os.environ.get('MORMOT2_DIR'),
+                        help='Racine EXACTE de mORMot2 (contient packages/lazarus/mormot2.lpk); force le lien package Lazarus')
+    parser.add_argument('--fix-mormot-msi', action='store_true',
+                        help='Windows: avec --mormot-dir, corrige le symbole MSI dans les sources mORMot2 (avec sauvegarde)')
     args = parser.parse_args(argv)
     cpu, os_name = host_target(args.arch)
     print(f'Cible demandee: {cpu}-{os_name} (--arch {args.arch})', flush=True)
@@ -453,6 +483,8 @@ def main(argv: list[str] | None = None) -> int:
         raise BuildError('Portail/DXGI sont des options serveur, pas client')
     if args.turbojpeg_archive and args.turbojpeg_source:
         raise BuildError('Choisir --turbojpeg-archive OU --turbojpeg-source')
+    if args.fix_mormot_msi and (not is_windows(os_name) or not args.mormot_dir):
+        raise BuildError('--fix-mormot-msi exige Windows et --mormot-dir avec la racine precise de mORMot2')
     # An explicit SDK folder overrides ambient CC/AR/etc. Individual CLI
     # switches override the folder. Without a folder, keep environment support.
     def selected(value: str | None, variable: str) -> str | None:
@@ -481,6 +513,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.prepare_only:
         laz = tool(args.lazbuild)
+    # Fail BEFORE the native build if the selected mORMot2 source still
+    # declares the nonexistent msi.dll!MsiEnumProductA import.  When several
+    # mORMot2 copies are registered, merely patching one copy is not enough.
+    mormot_package = None
+    if args.mormot_dir:
+        mormot_root = args.mormot_dir.resolve()
+        mormot_package = mormot_root / 'packages/lazarus/mormot2.lpk'
+        if not mormot_package.is_file():
+            raise BuildError('Paquet mORMot2 introuvable: '+str(mormot_package))
+        if is_windows(os_name):
+            fixer = ROOT / 'tools/fix_mormot_msi_import.py'
+            require_mormot_fixer_check(fixer)
+            fixer_options = [] if args.fix_mormot_msi else ['--check']
+            run([sys.executable, fixer, *fixer_options, mormot_root])
+    elif is_windows(os_name) and not args.prepare_only:
+        print('AVERTISSEMENT: --mormot-dir absent: impossible de verifier la copie mORMot2 '
+              'enregistree dans Lazarus (import MSI et anciens .ppu).', flush=True)
     stage = ROOT / 'native/static' / target
     stage.mkdir(parents=True, exist_ok=True)
     # Removing the generated feature include FIRST prevents use of stale
@@ -663,10 +712,14 @@ def main(argv: list[str] | None = None) -> int:
                 run([isolated], cwd=Path(clean), clean_windows_runtime=True)
         else:
             run([executable])
-    if args.mormot_dir:
-        package=args.mormot_dir.resolve()/'packages/lazarus/mormot2.lpk'
-        if not package.is_file(): raise BuildError('Paquet mORMot2 introuvable: '+str(package))
-        run([laz,'--add-package-link '+str(package)])
+    if mormot_package is not None:
+        # Make the EXACT patched tree visible to Lazarus, then rebuild its
+        # package explicitly before the applications. `--build-all` alone on
+        # the application may use another previously registered mORMot2 PPU.
+        print('mORMot2 utilise: '+str(mormot_package.resolve()), flush=True)
+        register_lazarus_package_link(laz, mormot_package)
+        run([laz,'--build-all','--compiler='+fpc,'--cpu='+cpu,'--os='+os_name,
+             mormot_package])
     # Force rebuilding after feature changes; no stale standalone .ppu reuse.
     for role,app,project in zip(['server','client'],['MeshKVMServer','MeshKVMClient'],projects):
         if args.only not in ['both',role]: continue

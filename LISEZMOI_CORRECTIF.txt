@@ -1,0 +1,54 @@
+MeshKVM v9 - correctif de compatibilite des scripts mORMot2
+==========================================================
+
+ERREUR CORRIGEE
+  fix_mormot_msi_import.py: error: unrecognized arguments: --check
+
+CAUSE
+  Le correctif de lazbuild precedent actualisait build/build_standalone.py
+  sans inclure la nouvelle version de tools/fix_mormot_msi_import.py.
+  Le constructeur appelait donc une option absente de l'ancien outil.
+
+INSTALLATION
+  Extraire TOUT le ZIP dans C:\tranquilit\kvmlazarus, en conservant
+  les sous-dossiers, et accepter le remplacement des fichiers.
+  Deux fichiers doivent etre remplaces ENSEMBLE :
+     build\build_standalone.py
+     tools\fix_mormot_msi_import.py
+
+VERIFICATION IMMEDIATE (cmd.exe)
+  cd /d C:\tranquilit\kvmlazarus
+  "C:\Program Files\Python314\python.exe" tools\fix_mormot_msi_import.py --help
+
+  La ligne d'usage doit contenir --check. Sinon, le fichier tools\...
+  n'a pas ete correctement remplace.
+
+CORRIGER LE SYMBOLE MSI DANS mORMot2 (UNE SEULE FOIS)
+  "C:\Program Files\Python314\python.exe" tools\fix_mormot_msi_import.py "C:\tranquilit\mORMot2"
+
+  L'outil modifie uniquement l'import MS Windows invalide
+  MsiEnumProductA -> export MsiEnumProductsA et sauvegarde la source
+  d'origine sous le nom mormot.lib.sspi.pas.meshkvm-backup.
+  Si la source est deja corrigee, aucune modification.
+
+VERIFIER SANS MODIFIER
+  "C:\Program Files\Python314\python.exe" tools\fix_mormot_msi_import.py --check "C:\tranquilit\mORMot2"
+  Resultat attendu: OK: import MSI valide dans ...
+
+REPRENDRE LA COMPILATION
+  build_standalone_windows.cmd --arch x86 ^
+    --fpc "C:\lazarus_4_8\fpc\bin\i386-win32\fpc.exe" ^
+    --lazbuild "C:\lazarus_4_8\lazarus\lazbuild.exe" ^
+    --toolchain-bin "C:\msys64\mingw32\bin" ^
+    --turbojpeg-archive "C:\msys64\mingw32\lib\libturbojpeg.a" ^
+    --mormot-dir "C:\tranquilit\mORMot2"
+
+  Variante: ajouter --fix-mormot-msi a la compilation pour corriger la
+  source automatiquement au lieu de l'etape manuelle ci-dessus.
+  --fix-mormot-msi n'est pas necessaire lorsque --check est deja OK.
+
+TESTS
+  45 tests de regression valides dans l'environnement Linux de preparation,
+  dont des tests sur la version obsolete de l'outil et sur une vraie source
+  mORMot2 fournie. La compilation Lazarus/FPC Windows doit etre revalidee
+  sur votre poste.
