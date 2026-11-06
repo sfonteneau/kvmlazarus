@@ -93,6 +93,29 @@ Le script refuse un GCC x64 en mode x86. Il n'ajoute pas automatiquement
 et le runtime 32 bits. Le nom commercial MinGW-w64 ne suffit pas a definir
 l'architecture de sortie: verifier son gcc -dumpmachine.
 
+
+## Correctif MSYS2 MINGW32 : GCC prefixe et linker ld.exe
+
+Certaines installations MSYS2 MINGW32 fournissent `i686-w64-mingw32-gcc.exe`
+mais leur linker est seulement `ld.exe`. C'est valide : un nom de fichier
+sans prefixe ne prouve pas un melange x86/x64.
+
+Le script verifie maintenant la **cible PE par defaut** du linker avec
+`ld.exe --verbose`, puis configure l'option FPC `-XP` en fonction du **nom
+reellement present** : sans prefixe pour `ld.exe`, avec prefixe seulement si
+`i686-w64-mingw32-ld.exe` existe. La recherche reste bornee a `--toolchain-bin`.
+Si le format du linker est incompatible, le script refuse la compilation.
+
+Verification manuelle :
+
+```bat
+C:\msys64\mingw32\bin\ld.exe --verbose | findstr OUTPUT_FORMAT
+```
+
+Pour la cible x86, chercher `pei-i386` ; pour x64, `pei-x86-64`.
+Le correctif ne telecharge aucune dependance et ne change pas le code Pascal.
+Il ne prouve pas encore la compilation de MeshKVM sur ton installation.
+
 ## TurboJPEG
 
 Fournir une VRAIE archive statique .a de la meme architecture et du meme SDK/CRT.

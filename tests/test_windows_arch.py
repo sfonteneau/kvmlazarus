@@ -165,6 +165,28 @@ class Targets(unittest.TestCase):
         with self.assertRaises(b.BuildError):
             b.option_text(['-FDpath"invalid'])
 
+    def test_unprefixed_ld_with_prefixed_msys2_gcc(self):
+        """Real configuration from the user's MSYS2 MINGW32 diagnostic."""
+        cc='/MinGW32/bin/i686-w64-mingw32-gcc.exe'
+        ld='/MinGW32/bin/ld.exe'
+        self.assertEqual(b.windows_linker_flags(cc,ld),
+                         ['-Xe','-FD/MinGW32/bin','-XP'])
+        self.assertEqual(b.windows_linker_flags(cc,'/MinGW32/bin/i686-w64-mingw32-ld.exe'),
+                         ['-Xe','-FD/MinGW32/bin','-XPi686-w64-mingw32-'])
+        with self.assertRaises(b.BuildError):
+            b.windows_linker_flags(cc,'/MinGW32/bin/link.exe')
+
+    def test_linker_default_format_is_verified_not_its_name(self):
+        for cpu,fmt in [('i386','pei-i386'),('x86_64','pei-x86-64')]:
+            with patch.object(b,'run',return_value=f'GNU ld\nOUTPUT_FORMAT("{fmt}")') as mock:
+                b.check_windows_linker('ld.exe',cpu)
+                mock.assert_called_once_with(['ld.exe','--verbose'],capture=True)
+        for cpu,fmt in [('i386','pei-x86-64'),('x86_64','pei-i386'),
+                        ('i386','elf64-x86-64'),('i386','')]:
+            with patch.object(b,'run',return_value='OUTPUT_FORMAT("'+fmt+'")'):
+                with self.assertRaisesRegex(b.BuildError,'Linker incompatible'):
+                    b.check_windows_linker('ld.exe',cpu)
+
     def test_archive_formats(self):
         for cpu,fmt in [('i386','pe-i386'), ('x86_64','pe-x86-64')]:
             with patch.object(b,'run',return_value='a.o: file format '+fmt):
@@ -229,6 +251,8 @@ class Targets(unittest.TestCase):
                     args=[str(x) for x in argv]; calls.append(args)
                     if '-dumpmachine' in args:
                         return ('i686' if cpu=='i386' else 'x86_64')+'-w64-mingw32'
+                    if '--verbose' in args and args[0].endswith('ld.exe'):
+                        return 'GNU ld\nOUTPUT_FORMAT("'+('pei-i386' if cpu=='i386' else 'pei-x86-64')+'")'
                     if '-iTP' in args: return cpu
                     if '-iTO' in args: return system
                     if args[0].endswith('nm.exe'):
@@ -265,6 +289,36 @@ class Targets(unittest.TestCase):
             self.assertTrue((root/'server/MeshKVMServer_Standalone_x86.lpi').is_file())
             self.assertTrue((root/'server/MeshKVMServer_Standalone_x64.lpi').is_file())
 
+    def test_real_msys2_layout_prefixed_gcc_unprefixed_ld(self):
+        """MSYS2 MINGW32 has i686-prefixed gcc.exe and plain ld.exe."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); sdk=root/'msys2'/'mingw32'/'bin'
+            for name in ('i686-w64-mingw32-gcc','ar','nm','objdump','ld'):
+                dummy_tool(sdk/(name+'.exe'))
+            fpc=dummy_tool(root/'fpc.exe')
+            queries=[]
+            def fake_run(argv, **kwargs):
+                args=[str(a) for a in argv]
+                queries.append(args)
+                if '-dumpmachine' in args:
+                    return 'i686-w64-mingw32'
+                if '--verbose' in args and args[0].endswith('ld.exe'):
+                    return 'GNU ld\nOUTPUT_FORMAT("pei-i386")'
+                if '-iTP' in args: return 'i386'
+                if '-iTO' in args: return 'win32'
+                return ''
+            with patch.object(b,'ROOT',root), patch.object(b.platform,'system',return_value='Windows'), \
+                 patch.object(b.platform,'machine',return_value='AMD64'), \
+                 patch.object(b,'run',side_effect=fake_run):
+                self.assertEqual(b.main(['--arch','x86','--toolchain-bin',str(sdk),
+                                         '--fpc',fpc,'--check-toolchain']),0)
+            self.assertEqual(len(queries),4)
+            self.assertTrue(any('--verbose' in args for args in queries))
+            cc=str(sdk/'i686-w64-mingw32-gcc.exe')
+            ld=str(sdk/'ld.exe')
+            self.assertEqual(b.windows_linker_flags(cc,ld),
+                             ['-Xe','-FD'+str(sdk),'-XP'])
+
     def test_check_toolchain_stops_before_native_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp); sdk=root/'bin'
@@ -272,10 +326,10 @@ class Targets(unittest.TestCase):
                 dummy_tool(sdk/(name+'.exe'))
             with patch.object(b,'ROOT',root), patch.object(b.platform,'system',return_value='Windows'), \
                  patch.object(b.platform,'machine',return_value='AMD64'), \
-                 patch.object(b,'run',side_effect=['i686-w64-mingw32','i386','win32']) as run:
+                 patch.object(b,'run',side_effect=['i686-w64-mingw32','OUTPUT_FORMAT("pei-i386")','i386','win32']) as run:
                 self.assertEqual(b.main(['--arch','x86','--toolchain-bin',str(sdk),
                                          '--fpc',str(sdk/'fpc.exe'),'--check-toolchain']),0)
-                self.assertEqual(run.call_count,3)
+                self.assertEqual(run.call_count,4)
                 self.assertFalse((root/'native').exists())
 
     def test_cli_contains_arch_choices(self):

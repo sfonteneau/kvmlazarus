@@ -130,10 +130,36 @@ def select_c_tool(name: str, explicit: str | None, bin_dir: Path | None,
     return tool(name)
 
 
+def check_windows_linker(ld: str, cpu: str) -> None:
+    """Check the DEFAULT PE output architecture, not the ld.exe file name.
+
+    MSYS2 MINGW32 commonly ships a prefixed GCC but an unprefixed ld.exe.
+    Both are valid when ld defaults to the same target as GCC/FPC.
+    """
+    output = run([ld, '--verbose'], capture=True)
+    match = re.search(r'\bOUTPUT_FORMAT\s*\(\s*"?([a-zA-Z0-9_.+-]+)', output)
+    fmt = match.group(1) if match else None
+    expected = {'i386': 'pei-i386', 'x86_64': 'pei-x86-64'}[cpu]
+    if fmt != expected:
+        raise BuildError(
+            f'Linker incompatible avec {cpu}-Windows: {ld} '
+            f'annonce {fmt or "un format inconnu"}, attendu {expected}. '
+            'Choisir un --toolchain-bin de la bonne architecture.')
+
+
 def windows_linker_flags(cc: str, ld: str) -> list[str]:
+    """Tell FPC to run the linker name that ACTUALLY exists in MinGW."""
     prefix = compiler_prefix(cc)
-    # Empty -XP explicitly clears a cross prefix from the user's fpc.cfg.
-    return ['-Xe', '-FD' + str(Path(ld).parent), '-XP' + prefix]
+    ld_stem = Path(ld).stem
+    if ld_stem == prefix + 'ld':
+        chosen_prefix = prefix
+    elif ld_stem == 'ld':
+        chosen_prefix = ''
+    else:
+        raise BuildError('Nom de linker non pris en charge par FPC: ' + ld)
+    # -XP without an argument resets a cross prefix from fpc.cfg.
+    # -FD points at the selected MinGW directory, not Strawberry/PATH.
+    return ['-Xe', '-FD' + str(Path(ld).parent), '-XP' + chosen_prefix]
 
 
 def option_text(options: list[str]) -> str:
@@ -376,8 +402,7 @@ def main(argv: list[str] | None = None) -> int:
     if is_windows(os_name):
         objdump = select_c_tool('objdump', selected(args.objdump, 'OBJDUMP'), args.toolchain_bin, cc, cpu=cpu)
         ld = select_c_tool('ld', None, args.toolchain_bin, cc, cpu=cpu)
-        if Path(ld).stem != compiler_prefix(cc) + 'ld':
-            raise BuildError('Nom du linker incompatible avec le prefixe GCC: ' + ld)
+        check_windows_linker(ld, cpu)
         linker_flags = windows_linker_flags(cc, ld)
     fpc = None
     laz = None
@@ -386,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
         fpc = tool(fpc_name)
         check_fpc_target(fpc, cpu, os_name)
     if args.check_toolchain:
-        print('FPC et C annoncent la cible demandee; ar/nm et outils de liaison trouves.')
+        print('FPC, GCC et linker PE annoncent la cible demandee; ar/nm/objdump trouves.')
         print('Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.')
         return 0
     if not args.prepare_only:

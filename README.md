@@ -3,6 +3,7 @@
 Base de ce correctif: `MeshKVM_v9_autonome_sources.zip`.
 Choix Windows ajoute: `--arch x86` ou `--arch x64`.
 Voir `docs/WINDOWS_X86_X64.md` pour les commandes et la validation de cette passe.
+Correctif MinGW32: voir `docs/CORRECTIF_LINKER_MSYS2.md` (GCC prefixe + ld.exe non prefixe).
 Protocole: **meshkvm7**, inchange. JPEG 4:4:4, client BGR direct,
 bandeau F8, journal GUI, controles de flux et correctifs precedents conserves.
 
