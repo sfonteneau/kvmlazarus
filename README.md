@@ -1,3 +1,13 @@
+# MeshKVMClient - controle en CLI, fenetre maximisee
+
+Le client accepte `--control` pour demander le controle exclusif des que le
+serveur a valide son jeton et que le bureau est actif. La fenetre demarre
+**maximisee par defaut**; `--windowed` revient a 1080 x 730. Voir
+[docs/CLIENT_CONTROLE_CLI_ET_FENETRE.md](docs/CLIENT_CONTROLE_CLI_ET_FENETRE.md).
+Le protocole et les sources mORMot2 ne sont pas modifies.
+
+---
+
 # MeshKVM v9 - P1 / P2 / P3 (sources)
 
 Base : `kvmlazarus-main.zip` fourni dans la conversation.

@@ -37,6 +37,15 @@ printf '%s\n' "$OUTPUT" | grep -q '^HOST=192.168.1.50$'
 printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONNECT=1$'
 OUTPUT=$(env -u MESH_KVM_TOKEN "$TMP/test_client_options")
 printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONNECT=0$'
+printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONTROL=0$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXIMIZED=1$'
+OUTPUT=$(env -u MESH_KVM_TOKEN "$TMP/test_client_options" --host 192.168.1.50 --token "$TOKEN" --control --windowed)
+printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONNECT=1$'
+printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONTROL=1$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXIMIZED=0$'
+OUTPUT=$(env -u MESH_KVM_TOKEN "$TMP/test_client_options" --auto-control --windowed --maximized)
+printf '%s\n' "$OUTPUT" | grep -q '^AUTOCONTROL=1$'
+printf '%s\n' "$OUTPUT" | grep -q '^MAXIMIZED=1$'
 if env -u MESH_KVM_TOKEN "$TMP/test_server_options" --listen 300.1.2.3 --token "$TOKEN" >/dev/null 2>&1; then
   echo 'Invalid IPv4 unexpectedly accepted' >&2
   exit 1

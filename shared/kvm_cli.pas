@@ -32,6 +32,8 @@ type
     Port: Word;
     Token: string;
     AutoConnect: Boolean;
+    AutoControl: Boolean; // Ask the server for exclusive control after AUTH + active desktop.
+    Maximized: Boolean; // Maximize the application window on startup.
     TLS: Boolean;
     TLSCA: string;
   end;
@@ -171,8 +173,11 @@ begin
     'MeshKVMClient [--host IP-ou-DNS] [--port PORT] [--token SECRET]' + LineEnding +
     '              [--tls] [--tls-ca CERTIFICAT-CA-PEM]' + LineEnding +
     '              [--allow-insecure] [--no-h264] [--keyboard text|remote]' + LineEnding +
+    '              [--control] [--maximized|--windowed]' + LineEnding +
     'Par defaut : --host 127.0.0.1 --port 7900 ;' + LineEnding +
     'token depuis --token ou MESH_KVM_TOKEN, ou saisi dans la fenetre.' + LineEnding +
+    'Fenetre maximisee par defaut ; --windowed pour 1080x730.' + LineEnding +
+    '--control : demande le controle exclusif apres autorisation serveur et bureau actif.' + LineEnding +
     'Avec --host, --port ou --token et un token present, le client se connecte' +
     LineEnding + 'automatiquement ; sinon la fenetre permet la saisie manuelle.';
 end;
@@ -398,6 +403,8 @@ begin
   Options.Token := '';
   Options.Port := 0;
   Options.AutoConnect := False;
+  Options.AutoControl := False;
+  Options.Maximized := True;
   Options.TLS := False;
   Options.TLSCA := '';
   Options.Host := '127.0.0.1';
@@ -417,6 +424,10 @@ begin
       Exit(True);
     end;
     if A = '--allow-insecure' then Options.AllowInsecure := True
+    else if A = '--control' then Options.AutoControl := True
+    else if A = '--auto-control' then Options.AutoControl := True
+    else if A = '--windowed' then Options.Maximized := False
+    else if A = '--maximized' then Options.Maximized := True
     else if A = '--no-h264' then Options.H264 := False
     else if (A='--keyboard') or (Copy(A,1,11)='--keyboard=') then
     begin

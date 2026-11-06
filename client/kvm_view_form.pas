@@ -52,6 +52,7 @@ type
     FPendingMouseMove: Boolean;
     FPendingMouseX, FPendingMouseY: Word;
     FAutoConnect: Boolean;
+    FAutoControl, FAutoControlPending: Boolean;
 
     procedure ConnectClick(Sender: TObject);
     procedure MenuClick(Sender: TObject);
@@ -60,6 +61,7 @@ type
     procedure SetCommandsVisible(AVisible: Boolean);
     procedure DisconnectClick(Sender: TObject);
     procedure ControlClick(Sender: TObject);
+    procedure TryAutoRequestControl;
     procedure WindowDeactivated(Sender: TObject);
     procedure RefreshClick(Sender: TObject);
     procedure TextClick(Sender: TObject);
@@ -143,6 +145,7 @@ begin
   FCursorVisible := False;
   FKeyboardFocus := False;
   FAutoConnect := False;
+  FAutoControl := False; FAutoControlPending := False;
   FDesktopPaused := True;
   WebSocketsMaxFrameMB := 4;
 
@@ -270,6 +273,10 @@ begin
   FPort.Text := IntToStr(Options.Port);
   FToken.Text := Options.Token;
   FAutoConnect := Options.AutoConnect;
+  FAutoControl := Options.AutoControl;
+  FAutoControlPending := False; // A fresh session arms this after ConnectClick.
+  if Options.Maximized then WindowState := wsMaximized
+  else WindowState := wsNormal;
   FTls.Checked := Options.TLS;
   FTlsCaFile := Options.TLSCA;
   FAllowInsecure:=Options.AllowInsecure; FEnableH264:=Options.H264;
@@ -381,6 +388,7 @@ begin
   FAuthorized := False;
   FRemoteControl := False;
   FControlGranted := False;
+  FAutoControlPending := False;
   if GetCaptureControl = FView then SetCaptureControl(nil);
   FCursorVisible := False;
   FKeyboardFocus := False;
@@ -433,6 +441,7 @@ begin
     SetStatus('TLS requis hors loopback. --allow-insecure uniquement pour un tunnel/VPN de confiance.');
     Exit;
   end;
+  FAutoControlPending := FAutoControl;
   SetStatus('Connexion en cours...');
   FConnect.Enabled := False;
   // Reutiliser les options TLS pour le chemin mORMot2 donnant le code
@@ -535,6 +544,29 @@ begin
     SendPacket('L'); // Server releases all held inputs on relinquish.
     SetStatus('Visualisation uniquement : controle libere.');
   end;
+end;
+
+procedure TKvmViewForm.TryAutoRequestControl;
+var
+  SavedClick: TNotifyEvent;
+begin
+  // Never take control on merely opening the socket, with a view-only token,
+  // or while logind/the server says the desktop is locked or unavailable.
+  // The server is the sole authority: 'G' is a request, not a grant.
+  if not FAutoControlPending or not FAuthorized or not FRemoteControl or
+     FDesktopPaused or not FControl.Enabled or
+     (FSocket=nil) or (FSocket.WebSockets=nil) then Exit;
+  FAutoControlPending := False; // one request per connection, no busy retry loop
+  // Updating Checked from Pascal may fire OnClick on some widgetsets.
+  // Suppress the event and invoke the existing request path exactly once.
+  SavedClick := FControl.OnClick;
+  FControl.OnClick := nil;
+  try
+    FControl.Checked := True;
+  finally
+    FControl.OnClick := SavedClick;
+  end;
+  ControlClick(nil);
 end;
 
 procedure TKvmViewForm.WindowDeactivated(Sender: TObject);
@@ -797,6 +829,7 @@ begin
             DrainInputs;
           end;
       end;
+    TryAutoRequestControl; // AUTH and desktop state have both been processed.
     if HasSnapshot then
       try PresentSnapshot(Snapshot);
       except on E: Exception do

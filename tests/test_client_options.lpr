@@ -22,6 +22,8 @@ begin
   WriteLn('HOST=', O.Host);
   WriteLn('PORT=', O.Port);
   WriteLn('AUTOCONNECT=', Ord(O.AutoConnect));
+  WriteLn('AUTOCONTROL=', Ord(O.AutoControl));
+  WriteLn('MAXIMIZED=', Ord(O.Maximized));
   WriteLn('TOKENLEN=', Length(O.Token));
   WriteLn('TLS=', Ord(O.TLS));
 end.
