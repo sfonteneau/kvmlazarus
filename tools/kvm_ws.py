@@ -9,7 +9,7 @@ import ssl
 import struct
 import time
 
-PROTOCOL = 'meshkvm7'
+PROTOCOL = 'meshkvm8'
 MAX_MESSAGE = 4 * 1024 * 1024
 
 class Closed(ConnectionError):

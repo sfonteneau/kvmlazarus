@@ -1,0 +1,12 @@
+test_disappeared_requestor_not_fatal (__main__.NativeClipboardTests.test_disappeared_requestor_not_fatal) ... ok
+test_empty (__main__.NativeClipboardTests.test_empty) ... ok
+test_incremental_selection (__main__.NativeClipboardTests.test_incremental_selection) ... ok
+test_limit (__main__.NativeClipboardTests.test_limit) ... ok
+test_owner_and_clear (__main__.NativeClipboardTests.test_owner_and_clear) ... ok
+test_property_reply_is_bounded (__main__.NativeClipboardTests.test_property_reply_is_bounded) ... ok
+test_unicode (__main__.NativeClipboardTests.test_unicode) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.054s
+
+OK

@@ -88,6 +88,22 @@
         <Filename Value="../shared/kvm_surface.pas" />
         <IsPartOfProject Value="True" />
       </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_clipboard_wire.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_clipboard_base.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="../shared/kvm_clipboard_native.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
+      <Unit>
+        <Filename Value="kvm_clipboard_client_worker.pas" />
+        <IsPartOfProject Value="True" />
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

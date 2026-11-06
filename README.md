@@ -1,3 +1,20 @@
+# Ajout clipboard bidirectionnel - livraison du 2026-11-06
+
+**Recompiler serveur et client ensemble : protocole `meshkvm8`.**
+Dans F8, deux interrupteurs independants et desactives par defaut :
+`Mon presse-papiers -> distant` et `Distant -> mon presse-papiers`.
+Texte Unicode uniquement (64 Kio), controle exclusif requis; aucun collage
+simule. Windows / X11 / macOS : backends fournis; Wayland clipboard non fourni.
+Compilation autonome conservee, pas de nouvelle DLL privee sous Windows.
+
+Guide : [docs/CLIPBOARD.md](docs/CLIPBOARD.md).
+Validation et limites : [docs/VALIDATION_CLIPBOARD.md](docs/VALIDATION_CLIPBOARD.md).
+Les nouveaux executables et tests Pascal n'ont pas ete compiles ici.
+Les sections suivantes conservent l'historique : le protocole courant est
+`meshkvm8`, meme si un ancien chapitre mentionne `meshkvm7`.
+
+---
+
 # MeshKVMClient - controle en CLI, fenetre maximisee
 
 Le client accepte `--control` pour demander le controle exclusif des que le

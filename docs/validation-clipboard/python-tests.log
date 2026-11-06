@@ -1,0 +1,50 @@
+...........................PASS: client startup maximize and opt-in server-authorized exclusive control (source checks only)
+PASS: client v9 de l utilisateur + diagnostic WebSocket + chemin interne de route
+OK : journal GUI, 0 WriteLn dans le client, projet XML valide
+PASS: 13 checks for overlay structure and session behavior (not compiled)
+OK - messages de diagnostic distincts dans les sources (test lexical uniquement)
+PASS: static bounds and optimized code paths (no runtime / FPS measurement)
+PASS: static pipeline invariants, JPEG sample and 1000 independent copy cases
+OK: 4:4:4 JPEG, accurate DCT flag, 512x512, max buffer 1574912 <= 2097152
+PASS: routes WS, client v9/auth capabilities, capture souris (controle lexical)
++ cc -std=c11 -O2 -fPIC -Wno-misleading-indentation -DKVM_STATIC_BUILD -c /mnt/data/_kvm_clipboard/MeshKVM/native/session/kvm_session_linux.c -o /tmp/tmpl2pwdghb/libkvm_session.o
++ ar rcs /tmp/tmpl2pwdghb/libkvm_session.a /tmp/tmpl2pwdghb/libkvm_session.o
++ nm -g /tmp/tmpl2pwdghb/libkvm_session.a
++ nm -g /tmp/tmpl2pwdghb/libkvm_session.a
+......................+ clang -target i686-w64-windows-gnu -O2 -c /tmp/tmp5w85mjyc/fixture.c -o /tmp/tmp5w85mjyc/i386.o
++ llvm-ar rcs /tmp/tmp5w85mjyc/i386.a /tmp/tmp5w85mjyc/i386.o
++ nm -g /tmp/tmp5w85mjyc/i386.a
++ objdump -f /tmp/tmp5w85mjyc/i386.a
++ objdump -f /tmp/tmp5w85mjyc/i386.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x86 /out:/tmp/tmp5w85mjyc/i386.exe /tmp/tmp5w85mjyc/i386.o
+REAL COFF/PE fixture checked, NOT executed: i386
++ clang -target x86_64-w64-windows-gnu -O2 -c /tmp/tmp5w85mjyc/fixture.c -o /tmp/tmp5w85mjyc/x86_64.o
++ llvm-ar rcs /tmp/tmp5w85mjyc/x86_64.a /tmp/tmp5w85mjyc/x86_64.o
++ nm -g /tmp/tmp5w85mjyc/x86_64.a
++ objdump -f /tmp/tmp5w85mjyc/x86_64.a
++ objdump -f /tmp/tmp5w85mjyc/x86_64.a
++ lld-link /entry:meshkvm_probe /subsystem:console /nodefaultlib /machine:x64 /out:/tmp/tmp5w85mjyc/x86_64.exe /tmp/tmp5w85mjyc/x86_64.o
+....REAL COFF/PE fixture checked, NOT executed: x86_64
+Cible demandee: i386-win32 (--arch x86)
+......FPC, GCC et linker PE annoncent la cible demandee; ar/nm/objdump trouves.
+Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.
+Cible demandee: i386-win32 (--arch x86)
+
+Termine: executables dans /tmp/meshkvm arch 9fajgay5/dist/i386-win32
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.
+Cible demandee: x86_64-win64 (--arch x64)
+...........
+Termine: executables dans /tmp/meshkvm arch 9fajgay5/dist/x86_64-win64
+Copier seulement le serveur OU le client necessaire; conserver les notices tierces de distribution.
+Cible demandee: i386-win32 (--arch x86)
+..........FPC, GCC et linker PE annoncent la cible demandee; ar/nm/objdump trouves.
+Aucun lien executable effectue: RTL/LCL, TurboJPEG et mORMot2 restent a valider au build.
++ ar s '/tmp/kvm group regression orw4hm88/libkvm_wincrt.a'
++ ar t '/tmp/kvm group regression orw4hm88/libkvm_wincrt.a'
+..+ ar s /tmp/tmpkrmlhbtn/libkvm_wincrt.a
++ ar t /tmp/tmpkrmlhbtn/libkvm_wincrt.a
+.
+----------------------------------------------------------------------
+Ran 83 tests in 3.138s
+
+OK

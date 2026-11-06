@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, SyncObjs,
   mormot.core.base, mormot.net.http, mormot.net.server, mormot.net.ws.core,
   mormot.net.ws.server, kvm_wire, kvm_frame, kvm_flow,
-  kvm_damage, kvm_turbojpeg, kvm_cli, kvm_adaptive, kvm_video, kvm_transport, kvm_extwire, kvm_security, kvm_metrics;
+  kvm_damage, kvm_turbojpeg, kvm_cli, kvm_adaptive, kvm_video, kvm_transport, kvm_extwire, kvm_security, kvm_metrics, kvm_clipboard_wire, kvm_clipboard_server_worker;
 
 type
   TKvmServer = class;
@@ -25,7 +25,8 @@ type
   TKvmClientState = record
     ID: THttpServerConnectionID;
     CanControl, Ready, DesktopNoticePending, Authenticated, H264: Boolean;
-    InputRate, ByteRate, TextRate: TKvmRate;
+    InputRate, ByteRate, TextRate, ClipboardRate, ClipboardBytes: TKvmRate;
+    LastClipboardSerial: Cardinal;
     BadFrames: Integer;
     LastTextSerial: Cardinal;
     LastTextPacket, LastTextReceipt: RawByteString;
@@ -42,6 +43,7 @@ type
   private
     FSocket: TKvmWebSocketServer;
     FWorker: TCaptureThread;
+    FClipboardWorker: TKvmClipboardServerWorker;
     FWakeCapture: TEvent;
     FMaxW, FMaxH: Integer;
     FAdaptive: Boolean;
@@ -61,6 +63,9 @@ type
     FPendingKeyRelease: array[0..255] of Boolean;
     FPendingButtonRelease: array[1..3] of Boolean;
     FReleaseX, FReleaseY: Word;
+    function ClipboardAllowed(ID: QWord; Epoch: Cardinal): Boolean;
+    function ClipboardReply(ID: QWord; const Reply: TKvmClipReply): Boolean;
+    procedure HandleClipboardFrame(Sender: TWebSocketProcess; const Packet: RawByteString);
     function AllowUpgrade(Protocol: TWebSocketProtocol): Integer;
     procedure ProtocolClosed(Protocol: TWebSocketProtocol);
     function AcceptPacket(ID: THttpServerConnectionID; Bytes: Integer): Boolean;
@@ -103,7 +108,7 @@ type
 
 implementation
 
-uses Math, kvm_desktop, kvm_codec, kvm_session_guard, kvm_schedule;
+uses Math, kvm_desktop, kvm_codec, kvm_session_guard, kvm_schedule, kvm_clipboard_native;
 
 const
   // A dead network client may never deliver a WebSocket close notification.
@@ -290,6 +295,9 @@ begin
       RawUtf8(GetEnvironmentVariable('MESH_KVM_TLS_PASSWORD')))
   else
     FSocket.WaitStarted;
+  FClipboardWorker:=TKvmClipboardServerWorker.Create(@CreateClipboardBackend,
+    @ClipboardAllowed,@ClipboardReply,Pos('Wayland',DesktopBackendName)=0);
+  FClipboardWorker.Start;
   FWorker := TCaptureThread.Create(Self);
   FWorker.Start;
 end;
@@ -297,7 +305,12 @@ end;
 destructor TKvmServer.Destroy;
 var
   I: Integer;
+  ClipboardWorker: TKvmClipboardServerWorker;
 begin
+  EnterCriticalSection(FLock);
+  try ClipboardWorker:=FClipboardWorker; FClipboardWorker:=nil;
+  finally LeaveCriticalSection(FLock); end;
+  ClipboardWorker.Free; // join before the transport and session locks die
   if FWorker <> nil then
   begin
     FWorker.Terminate;
@@ -692,6 +705,9 @@ begin
     InitRate(FClients[I].InputRate,1000,500,NowTick);
     InitRate(FClients[I].ByteRate,65536,32768,NowTick);
     InitRate(FClients[I].TextRate,512,128,NowTick);
+    InitRate(FClients[I].ClipboardRate,8,6,NowTick);
+    InitRate(FClients[I].ClipboardBytes,2*(KVM_CLIP_MAX_BYTES+32),
+      4*(KVM_CLIP_MAX_BYTES+32),NowTick);
     Result:=200;
   finally LeaveCriticalSection(FLock); end;
 end;
@@ -937,6 +953,67 @@ begin
     end;
 end;
 
+function TKvmServer.ClipboardAllowed(ID: QWord; Epoch: Cardinal): Boolean;
+var I: Integer;
+begin
+  EnterCriticalSection(FLock);
+  try
+    I:=FindClientLocked(THttpServerConnectionID(ID));
+    Result:=False;
+    if I<0 then Exit;
+    Result:=FClients[I].Ready and FClients[I].Authenticated and FClients[I].CanControl
+      and (FController=THttpServerConnectionID(ID)) and FDesktopAvailable
+      and (FDesktopEpoch=Epoch) and DesktopSessionAvailable;
+  finally LeaveCriticalSection(FLock); end;
+end;
+
+function TKvmServer.ClipboardReply(ID: QWord; const Reply: TKvmClipReply): Boolean;
+var R: TKvmClipReply; Frames: TWebSocketFrameDynArray;
+begin
+  R:=Reply;
+  // Recheck immediately before handing any clipboard contents to transport.
+  if not ClipboardAllowed(ID,R.Epoch) then
+  begin R.Text:=''; R.HasText:=False; R.WriteResult:=crDenied; R.ReadResult:=crDenied; end;
+  SetLength(Frames,1); Frames[0].opcode:=focBinary;
+  Frames[0].content:=[]; Frames[0].tix:=0; Frames[0].payload:=MakeClipReply(R);
+  Result:=(FSocket<>nil) and FSocket.TryQueue(THttpServerConnectionID(ID),Frames);
+  if not Result and (FSocket<>nil) then FSocket.AbortConnection(THttpServerConnectionID(ID));
+end;
+
+procedure TKvmServer.HandleClipboardFrame(Sender: TWebSocketProcess; const Packet: RawByteString);
+var Req: TKvmClipRequest; R: TKvmClipReply; I: Integer;
+  ID: THttpServerConnectionID; Valid: Boolean; NowTick: QWord;
+begin
+  ID:=Sender.Protocol.ConnectionID;
+  if not ReadClipRequest(Packet,Req) then begin BadPacket(Sender); Exit; end;
+  NowTick:=GetTickCount64; Valid:=False;
+  EnterCriticalSection(FLock);
+  try
+    I:=FindClientLocked(ID);
+    if (I>=0) and FClients[I].Authenticated and FClients[I].Ready then
+    begin
+      Valid:=(Req.Serial=NextSerial(FClients[I].LastClipboardSerial)) and
+        SpendRate(FClients[I].ClipboardRate,1,NowTick) and
+        SpendRate(FClients[I].ClipboardBytes,Length(Packet),NowTick);
+      if Valid then
+      begin FClients[I].LastClipboardSerial:=Req.Serial; FClients[I].LastSeen:=NowTick; end;
+    end;
+  finally LeaveCriticalSection(FLock); end;
+  if not Valid then
+  begin FMetrics.SecurityReject; FSocket.AbortConnection(ID); Exit; end;
+  R.Epoch:=Req.Epoch; R.Serial:=Req.Serial; R.HasText:=False; R.Text:='';
+  R.WriteResult:=crSkip; R.ReadResult:=crSkip;
+  if not ClipboardAllowed(QWord(ID),Req.Epoch) then
+  begin R.WriteResult:=crDenied; R.ReadResult:=crDenied; ClipboardReply(QWord(ID),R); Exit; end;
+  EnterCriticalSection(FLock);
+  try Valid:=(FClipboardWorker<>nil) and FClipboardWorker.Enqueue(QWord(ID),Req);
+  finally LeaveCriticalSection(FLock); end;
+  if Valid then Exit;
+  if (Req.Flags and KVM_CLIP_WRITE)<>0 then R.WriteResult:=crBusy;
+  if (Req.Flags and KVM_CLIP_READ)<>0 then R.ReadResult:=crBusy;
+  ClipboardReply(QWord(ID),R);
+end;
+
 procedure TKvmServer.HandleFrame(Sender: TWebSocketProcess; const Frame: TWebSocketFrame);
 var
   ID: THttpServerConnectionID; Action,Button: Byte; X,Y,VKey: Word;
@@ -979,6 +1056,8 @@ begin
     end;
     focBinary:
     begin
+      if (Length(Frame.payload)>0) and (Frame.payload[1]='c') then
+      begin HandleClipboardFrame(Sender,Frame.payload); Exit; end;
       if (Length(Frame.payload)=0) or (Length(Frame.payload)>KVM_MAX_TEXT_BYTES+5) or
          not AcceptPacket(ID,Length(Frame.payload)) then
       begin

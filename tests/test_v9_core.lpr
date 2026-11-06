@@ -11,7 +11,7 @@ var
   Available: Boolean; Points: TKvmCodePoints; F: TRgbFrame;
   I: Integer;
 begin
-  Check(KVM_SUBPROTOCOL='meshkvm7','protocol');
+  Check(KVM_SUBPROTOCOL='meshkvm8','protocol');
   Check(not ReadKey(MakeKey(True,0),Available,W),'zero virtual key rejected');
   Check(SecureTokenEqual('abcdefghijklmnop','abcdefghijklmnop'),'equal');
   Check(not SecureTokenEqual('abcdefghijklmnop','bbcdefghijklmnop'),'unequal');

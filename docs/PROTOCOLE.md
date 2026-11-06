@@ -1,3 +1,13 @@
+# Extension clipboard : meshkvm8
+
+Cette livraison ajoute `cQ/cR` et exige deux executables reconstruits.
+Voir [CLIPBOARD.md](CLIPBOARD.md) pour le format, les droits et les limites.
+Les messages video et entree existants conservent leur format. Le document
+ci-dessous decrit leur historique; son ancien numero de sous-protocole ne
+doit pas etre utilise avec les executables de cette livraison.
+
+---
+
 # MeshKVM v9 - protocole meshkvm7
 
 WebSocket `/kvm`, sous-protocole **meshkvm7 uniquement**. Entiers little-endian,

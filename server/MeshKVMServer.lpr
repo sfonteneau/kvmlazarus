@@ -77,9 +77,9 @@ begin
   try
     Server := TKvmServer.Create(Options);
     if Options.TLSCert <> '' then
-      WriteLn('Ecoute : wss://', BindAddress, '/kvm ; protocole meshkvm7')
+      WriteLn('Ecoute : wss://', BindAddress, '/kvm ; protocole meshkvm8')
     else
-      WriteLn('Ecoute : ws://', BindAddress, '/kvm ; protocole meshkvm7');
+      WriteLn('Ecoute : ws://', BindAddress, '/kvm ; protocole meshkvm8');
     if Options.FPS=0 then
       WriteLn('Diffusion JPEG : cadence libre (capture/CPU/ACK) ; qualite JPEG ',
         Options.Quality)

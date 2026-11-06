@@ -7,7 +7,7 @@ interface
 uses SysUtils;
 
 const
-  KVM_SUBPROTOCOL = 'meshkvm7';
+  KVM_SUBPROTOCOL = 'meshkvm8'; // clipboard cQ/cR; rebuild both peers
   // Public URL path sent by the client, including the initial slash.
   KVM_WS_PATH = '/kvm';
   // mORMot2.ServerUpgrade removes the initial slash before CloneByName/UpgradeUri.
@@ -38,7 +38,8 @@ const
   //   N + batch-serial:u32                       rejected complete batch (NACK)
   //   P                                          client heartbeat
   //   G/L/Z                                      acquire/release/reset input control
-  // WebSocket text: AUTH <token>; OK VIEW; OK CTRL; ERR AUTH.
+  //   cQ/cR  bounded Unicode clipboard RPC (see kvm_clipboard_wire.pas)
+  // WebSocket text: AUTH <token> <jpeg|h264>; OK VIEW; OK CTRL; ERR AUTH.
 
 type
   TKvmCodePoints = array of Cardinal;

@@ -11,7 +11,8 @@ uses
   mormot.net.ws.core, mormot.net.ws.client,
   kvm_wire, kvm_cli, kvm_jpeg_guard, kvm_extwire, kvm_codec, kvm_frame,
   kvm_rgb_bitmap, kvm_input_queue, kvm_security, kvm_tls_policy,
-  kvm_video_worker, kvm_surface, kvm_client_log;
+  kvm_video_worker, kvm_surface, kvm_client_log,
+  kvm_clipboard_wire, kvm_clipboard_native, kvm_clipboard_client_worker;
 
 type
   TKvmViewForm = class(TForm)
@@ -21,6 +22,9 @@ type
     FHost, FPort, FToken: TEdit;
     FConnect, FDisconnect, FRefresh, FText: TButton;
     FControl, FRemoteKeys: TCheckBox;
+    FClipToRemote, FClipFromRemote: TCheckBox;
+    FClipboardChanging: Boolean;
+    FClipboardWorker: TKvmClipboardClientWorker;
     FAllowInsecure, FEnableH264, FTransportFault: Boolean;
     FInputs: TKvmInputQueue;
     FDesktopEpoch: Cardinal;
@@ -54,6 +58,9 @@ type
     FAutoConnect: Boolean;
     FAutoControl, FAutoControlPending: Boolean;
 
+    procedure ClipboardClick(Sender: TObject);
+    procedure SyncClipboardOptions;
+    procedure StopClipboardWorker;
     procedure ConnectClick(Sender: TObject);
     procedure MenuClick(Sender: TObject);
     procedure WindowResized(Sender: TObject);
@@ -152,9 +159,9 @@ begin
   FTop := TPanel.Create(Self);
   FTop.Parent := Self;
   // Le panneau NE doit pas changer la geometrie du bureau distant.
-  // alTop reduirait l'image de 124 px meme quand la session est active.
+  // alTop reduirait la surface du bureau au lieu de superposer les commandes.
   FTop.Align := alNone;
-  FTop.SetBounds(0, 0, 1020, 124);
+  FTop.SetBounds(0, 0, 1020, 186);
   FTop.BevelOuter := bvNone;
   FTop.Color := clBtnFace;
 
@@ -237,6 +244,22 @@ begin
   FRemoteKeys.Caption:='Touches / IME du bureau distant (sinon texte compose localement)';
   FRemoteKeys.OnClick:=@KeyboardModeClick;
 
+  FClipToRemote:=TCheckBox.Create(Self);
+  FClipToRemote.Parent:=FTop; FClipToRemote.SetBounds(12,126,470,24);
+  FClipToRemote.Caption:='Mon presse-papiers -> distant';
+  FClipToRemote.Checked:=False; FClipToRemote.Enabled:=False;
+  FClipToRemote.Hint:='Synchroniser le texte courant puis les nouvelles copies (64 Kio max). Controle requis.';
+  FClipToRemote.ShowHint:=True; FClipToRemote.OnClick:=@ClipboardClick;
+  FClipFromRemote:=TCheckBox.Create(Self);
+  FClipFromRemote.Parent:=FTop; FClipFromRemote.SetBounds(510,126,490,24);
+  FClipFromRemote.Caption:='Distant -> mon presse-papiers';
+  FClipFromRemote.Checked:=False; FClipFromRemote.Enabled:=False;
+  FClipFromRemote.Hint:='Autoriser le bureau distant a remplacer mon presse-papiers texte. Controle requis.';
+  FClipFromRemote.ShowHint:=True; FClipFromRemote.OnClick:=@ClipboardClick;
+  L:=TLabel.Create(Self); L.Parent:=FTop; L.SetBounds(12,156,980,20);
+  L.Caption:='Presse-papiers : texte Unicode uniquement. Deux sens independants, desactives a chaque connexion.';
+
+
   FView := TPaintBox.Create(Self);
   FView.Parent := Self;
   FView.Align := alClient;
@@ -288,7 +311,7 @@ begin
   FClosing := True;
   if FTimer<>nil then FTimer.Enabled:=False;
   if FView<>nil then CloseSocket
-  else begin StopVideoWorker; FreeAndNil(FSocket); end;
+  else begin StopClipboardWorker; StopVideoWorker; FreeAndNil(FSocket); end;
   FBitmap.Free; FInputs.Free;
   DoneCriticalSection(FLock);
   inherited Destroy;
@@ -348,6 +371,41 @@ begin
   SetCommandsVisible(not FTop.Visible);
 end;
 
+procedure TKvmViewForm.StopClipboardWorker;
+var Worker: TKvmClipboardClientWorker;
+begin
+  EnterCriticalSection(FLock);
+  try Worker:=FClipboardWorker; FClipboardWorker:=nil;
+  finally LeaveCriticalSection(FLock); end;
+  if Worker<>nil then begin Worker.Stop; Worker.Free; end;
+end;
+
+procedure TKvmViewForm.SyncClipboardOptions;
+var Allowed: Boolean; Mask: Byte;
+begin
+  if (FClipToRemote=nil) or (FClipFromRemote=nil) then Exit;
+  Allowed:=ControlAllowed and (FClipboardWorker<>nil);
+  FClipboardChanging:=True;
+  try
+    FClipToRemote.Enabled:=Allowed; FClipFromRemote.Enabled:=Allowed;
+    if not Allowed then
+    begin FClipToRemote.Checked:=False; FClipFromRemote.Checked:=False; end;
+  finally FClipboardChanging:=False; end;
+  Mask:=0;
+  if Allowed and FClipToRemote.Checked then Mask:=Mask or KVM_CLIP_WRITE;
+  if Allowed and FClipFromRemote.Checked then Mask:=Mask or KVM_CLIP_READ;
+  if FClipboardWorker<>nil then FClipboardWorker.Configure(Mask,FDesktopEpoch);
+end;
+
+procedure TKvmViewForm.ClipboardClick(Sender: TObject);
+begin
+  if FClipboardChanging then Exit;
+  SyncClipboardOptions;
+  if not ControlAllowed then Exit;
+  SetStatus('Presse-papiers : local -> distant='+BoolToStr(FClipToRemote.Checked,True)+
+    ' ; distant -> local='+BoolToStr(FClipFromRemote.Checked,True));
+end;
+
 procedure TKvmViewForm.StopVideoWorker;
 var Worker: TKvmVideoWorker;
 begin
@@ -361,7 +419,7 @@ end;
 procedure TKvmViewForm.DecodeReply(const Payload: RawByteString);
 var Frame: TWebSocketFrame;
 begin
-  // Called only by the decode worker. CloseSocket joins it BEFORE releasing
+  // Called by video/clipboard workers. CloseSocket joins BOTH before freeing
   // FSocket; mORMot2 SendFrame serializes writes with its own output lock.
   if (FSocket=nil) or (FSocket.WebSockets=nil) then Exit;
   Frame.opcode:=focBinary; Frame.content:=[]; Frame.tix:=0;
@@ -375,6 +433,7 @@ end;
 
 procedure TKvmViewForm.CloseSocket;
 begin
+  StopClipboardWorker; // no native clipboard or send callbacks after this join
   // Best-effort release. The server also has disconnect/heartbeat cleanup.
   if FAuthorized and FControlGranted and (FSocket <> nil) then
     SendPacket('L');
@@ -397,6 +456,7 @@ begin
   FRefresh.Enabled := False;
   FText.Enabled := False;
   FDesktopPaused := True;
+  SyncClipboardOptions;
   ResetLocalInputs;
   FBitmap.SetSize(0, 0);
   FConnect.Enabled := True;
@@ -500,6 +560,7 @@ begin
     if not FSocket.WebSockets.SendFrame(Frame) then
       raise Exception.Create('Impossible d''envoyer le jeton.');
 
+    FClipboardWorker:=TKvmClipboardClientWorker.Create(@CreateClipboardBackend,@DecodeReply);
     FDisconnect.Enabled := True;
     FHost.Enabled := False;
     FPort.Enabled := False;
@@ -524,6 +585,7 @@ end;
 
 procedure TKvmViewForm.ControlClick(Sender: TObject);
 begin
+  SyncClipboardOptions;
   FText.Enabled := False;
   if GetCaptureControl = FView then SetCaptureControl(nil);
   ResetLocalInputs;
@@ -613,6 +675,7 @@ begin
     FControl.Enabled := FAuthorized and FRemoteControl;
     SetStatus('Bureau disponible. Redemander le controle si necessaire.');
   end;
+  SyncClipboardOptions;
   FView.Invalidate;
 end;
 
@@ -641,7 +704,12 @@ begin
       begin
         EnterCriticalSection(FLock);
         try
-          if FDecoder<>nil then FDecoder.Enqueue(Frame.payload);
+          if (Length(Frame.payload)>0) and (Frame.payload[1]='c') then
+          begin
+            if (FClipboardWorker=nil) or not FClipboardWorker.EnqueueReply(Frame.payload) then
+              FWorkerFault:=True;
+          end
+          else if FDecoder<>nil then FDecoder.Enqueue(Frame.payload);
         finally LeaveCriticalSection(FLock); end;
       end;
     focText, focConnectionClose:
@@ -709,7 +777,8 @@ end;
 procedure TKvmViewForm.PollTimer(Sender: TObject);
 var
   TextMsgs: array of string;
-  TextMsg, FatalError: string;
+  TextMsg, FatalError, ClipboardNotice: string;
+  DisableClipboard: Byte;
   Events: TKvmPacketList;
   Snapshot: TKvmPresentation;
   Stats: TKvmDecodeStats;
@@ -730,7 +799,7 @@ begin
     EnterCriticalSection(FLock);
     try
       TextMsgs:=FPendingTexts; FPendingTexts:=nil;
-      if FWorkerFault then FatalError:='Envoi ACK interrompu';
+      if FWorkerFault then FatalError:='Echange reseau interrompu ou reponse presse-papiers invalide';
     finally LeaveCriticalSection(FLock); end;
     if FatalError<>'' then
     begin CloseSocket; SetStatus(FatalError); Exit; end;
@@ -830,6 +899,18 @@ begin
           end;
       end;
     TryAutoRequestControl; // AUTH and desktop state have both been processed.
+    SyncClipboardOptions;
+    if (FClipboardWorker<>nil) and FClipboardWorker.TakeNotice(DisableClipboard,ClipboardNotice) then
+    begin
+      FClipboardChanging:=True;
+      try
+        if (DisableClipboard and KVM_CLIP_WRITE)<>0 then FClipToRemote.Checked:=False;
+        if (DisableClipboard and KVM_CLIP_READ)<>0 then FClipFromRemote.Checked:=False;
+      finally FClipboardChanging:=False; end;
+      SyncClipboardOptions;
+      if ClipboardNotice<>'' then SetStatus(ClipboardNotice);
+    end;
+
     if HasSnapshot then
       try PresentSnapshot(Snapshot);
       except on E: Exception do
